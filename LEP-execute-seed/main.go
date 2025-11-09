@@ -1,0 +1,645 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"time"
+
+	"github.com/google/uuid"
+)
+
+func main() {
+	// ====== CARREGA CONFIGURAÇÃO ======
+	config, err := LoadConfig()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[✗] Erro ao carregar config: %v\n", err)
+		os.Exit(1)
+	}
+
+	// ====== EXIBE CONFIGURAÇÃO ======
+	fmt.Println("\n========== 🌱 LEP Database Seeder v2.0 ==========")
+	fmt.Printf("[ℹ] URL Backend: %s\n", config.Server.URL)
+	fmt.Printf("[ℹ] Organização: %s\n", config.Auth.OrganizationName)
+	fmt.Printf("[ℹ] Log Level: %s\n", config.Logging.Level)
+	fmt.Println("================================================\n")
+
+	// ====== CRIAR LOGGER ======
+	isVerbose := config.Logging.Level == "debug" || config.Logging.Level == "verbose"
+	logger := NewLogger(isVerbose)
+
+	// ====== DETERMINAR ARQUIVOS DE SEED A EXECUTAR ======
+	seedFiles := determineSeedFiles(config.Seed.File, logger)
+	if len(seedFiles) == 0 {
+		logger.Error("Nenhum arquivo de seed encontrado para executar")
+		os.Exit(1)
+	}
+
+	fmt.Printf("[ℹ] Arquivos de seed: %v\n\n", seedFiles)
+
+	// ====== CRIAR CLIENTE DE API (COMPARTILHADO) ======
+	client := NewAPIClientV2(config.Server.URL, logger, config)
+
+	// ====== ESTADO ACUMULADO ======
+	totalCreated := 0
+	totalSkipped := 0
+	totalFailed := 0
+	allErrors := []SeedError{}
+
+	// ====== EXECUTAR CADA ARQUIVO DE SEED ======
+	for _, seedFile := range seedFiles {
+		fmt.Printf("\n\n╔══════════════════════════════════════════════════════════════╗\n")
+		fmt.Printf("║ Processando: %s\n", seedFile)
+		fmt.Printf("╚══════════════════════════════════════════════════════════════╝\n\n")
+
+		// ====== CARREGAR DADOS DE SEED ======
+		logger.Info(fmt.Sprintf("Carregando %s...", seedFile))
+		seedData, err := LoadSeedData(seedFile)
+		if err != nil {
+			logger.Error(fmt.Sprintf("Erro ao carregar seed: %v", err))
+			totalFailed++
+			continue
+		}
+
+		totalItems := len(seedData.Menus) + len(seedData.Categories) + len(seedData.Subcategories) + len(seedData.Environments) + len(seedData.Tables) + len(seedData.Products)
+		logger.Info(fmt.Sprintf("Arquivo carregado com %d items", totalItems))
+
+		// ====== CRIAR SERVIÇO DE SEED ======
+		service := &SeedServiceV2{
+			client:   client,
+			logger:   logger,
+			config:   config,
+			seedData: seedData,
+			state: &SeedState{
+				created: 0,
+				skipped: 0,
+				failed:  0,
+				errors:  []SeedError{},
+			},
+		}
+
+		// ====== EXECUTAR SEED ======
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		startTime := time.Now()
+		err = service.Execute(ctx)
+		duration := time.Since(startTime)
+		cancel()
+
+		// ====== ACUMULAR RESULTADOS ======
+		totalCreated += service.state.created
+		totalSkipped += service.state.skipped
+		totalFailed += service.state.failed
+		allErrors = append(allErrors, service.state.errors...)
+
+		// ====== EXIBIR RESUMO PARCIAL ======
+		fmt.Println("\n========== 🎉 RESUMO - " + seedFile + " ==========")
+		fmt.Printf("[✓] Criados: %d\n", service.state.created)
+		fmt.Printf("[⏭] Já existiam: %d\n", service.state.skipped)
+		fmt.Printf("[✗] Erros: %d\n", service.state.failed)
+		fmt.Printf("[⏱] Tempo: %s\n", duration)
+		fmt.Println("==========================================\n")
+
+		// Exibir erros deste arquivo se houver
+		if len(service.state.errors) > 0 {
+			fmt.Println("[✗] Erros detectados:")
+			for _, e := range service.state.errors {
+				fmt.Printf("  - [%s] %s: %s\n", e.Type, e.Item, e.Message)
+			}
+			fmt.Println()
+		}
+	}
+
+	// ====== EXIBIR RESUMO TOTAL ======
+	fmt.Println("\n╔══════════════════════════════════════════════════════════════╗")
+	fmt.Println("║               RESUMO TOTAL DA EXECUÇÃO                        ║")
+	fmt.Println("╚══════════════════════════════════════════════════════════════╝\n")
+	fmt.Printf("[✓] Total Criados: %d\n", totalCreated)
+	fmt.Printf("[⏭] Total Já Existiam: %d\n", totalSkipped)
+	fmt.Printf("[✗] Total Erros: %d\n", totalFailed)
+	fmt.Println()
+
+	// ====== EXIBIR TODOS OS ERROS SE HOUVER ======
+	if len(allErrors) > 0 {
+		fmt.Println("[✗] Erros detectados no total:")
+		for _, e := range allErrors {
+			fmt.Printf("  - [%s] %s: %s\n", e.Type, e.Item, e.Message)
+		}
+		fmt.Println()
+	}
+
+	// ====== SAIR COM STATUS CORRETO ======
+	if totalFailed > 0 {
+		os.Exit(1)
+	}
+
+	os.Exit(0)
+}
+
+// determineSeedFiles retorna lista de arquivos de seed a executar
+// Se o arquivo na config for específico (com -file), executa apenas ele
+// Caso contrário, executa ambos os arquivos padrão: seed-fattoria.json e seed-data.json
+func determineSeedFiles(configFile string, logger *Logger) []string {
+	// Se foi passado -file na CLI, retorna apenas esse arquivo
+	if configFile != "seed-fattoria.json" {
+		if _, err := os.Stat(configFile); err == nil {
+			return []string{configFile}
+		}
+		logger.Error(fmt.Sprintf("Arquivo especificado não encontrado: %s", configFile))
+		return []string{}
+	}
+
+	// Senão, executa os dois arquivos padrão se existirem
+	defaultFiles := []string{"seed-fattoria.json", "seed-data.json"}
+	var availableFiles []string
+
+	for _, file := range defaultFiles {
+		if _, err := os.Stat(file); err == nil {
+			availableFiles = append(availableFiles, file)
+		} else {
+			logger.Error(fmt.Sprintf("Arquivo não encontrado: %s (será ignorado)", file))
+		}
+	}
+
+	return availableFiles
+}
+
+// SeedServiceV2 gerencia a execução do seed contra o backend
+type SeedServiceV2 struct {
+	client   *APIClientV2
+	logger   *Logger
+	config   *Config
+	seedData *SeedData
+	state    *SeedState
+}
+
+// SeedState rastreia o estado da execução
+type SeedState struct {
+	created int
+	skipped int
+	failed  int
+	errors  []SeedError
+}
+
+// SeedError representa um erro durante execução
+type SeedError struct {
+	Type    string // auth, menu, category, etc
+	Item    string // nome do item
+	Message string // mensagem de erro
+}
+
+// Execute executa o seed completo
+func (s *SeedServiceV2) Execute(ctx context.Context) error {
+	// PASSO 1: Criar/Obter Organização e Fazer Login
+	fmt.Println("========== Passo 1: Criando Organização ==========")
+	orgID, projID, email, err := s.createOrganization()
+	if err != nil {
+		s.logger.Error(fmt.Sprintf("Erro ao criar organização: %v", err))
+		s.state.failed++
+		s.state.errors = append(s.state.errors, SeedError{
+			Type:    "org",
+			Item:    s.config.Auth.OrganizationName,
+			Message: err.Error(),
+		})
+		return err
+	}
+
+	s.logger.Info(fmt.Sprintf("Organização OK (ID: %s)", orgID))
+	s.state.created++
+
+	// PASSO 2: Fazer Login
+	fmt.Println("\n========== Passo 2: Fazendo Login ==========")
+	err = s.login(email)
+	if err != nil {
+		s.logger.Error(fmt.Sprintf("Erro ao fazer login: %v", err))
+		s.state.failed++
+		s.state.errors = append(s.state.errors, SeedError{
+			Type:    "auth",
+			Item:    email,
+			Message: err.Error(),
+		})
+		return err
+	}
+
+	s.logger.Info(fmt.Sprintf("Autenticado como %s", email))
+	s.client.SetHeaders(s.client.token, orgID, projID)
+
+	// PASSO 3: Criar Menus
+	fmt.Println("\n========== Passo 3: Criando Menus ==========")
+	menuIDs := make(map[int]string) // idx -> UUID
+	for idx, menu := range s.seedData.Menus {
+		// Verificar se menu já existe
+		existingID, err := s.client.GetMenuByName(menu.Name)
+		if err == nil && existingID != uuid.Nil {
+			menuIDs[idx] = existingID.String()
+			s.logger.Info(fmt.Sprintf("Menu %s já existe", menu.Name))
+			s.state.skipped++
+			continue
+		}
+
+		// Criar novo menu
+		id, err := s.client.CreateMenu(menu.Name, menu.Order)
+		if err != nil {
+			s.logger.Error(fmt.Sprintf("Erro ao criar menu %s: %v", menu.Name, err))
+			s.state.failed++
+			s.state.errors = append(s.state.errors, SeedError{
+				Type:    "menu",
+				Item:    menu.Name,
+				Message: err.Error(),
+			})
+		} else {
+			menuIDs[idx] = id.String()
+			s.logger.Info(fmt.Sprintf("Menu criado: %s", menu.Name))
+			s.state.created++
+		}
+	}
+
+	// PASSO 4: Criar Categorias
+	fmt.Println("\n========== Passo 4: Criando Categorias ==========")
+	categoryIDs := make(map[int]string) // idx -> UUID
+	for idx, cat := range s.seedData.Categories {
+		menuID, ok := menuIDs[cat.MenuIDRef]
+		if !ok {
+			s.logger.Error(fmt.Sprintf("Menu não encontrado para categoria %s", cat.Name))
+			s.state.failed++
+			continue
+		}
+
+		// Verificar se categoria já existe
+		existingID, err := s.client.GetCategoryByName(cat.Name)
+		if err == nil && existingID != uuid.Nil {
+			categoryIDs[idx] = existingID.String()
+			s.logger.Info(fmt.Sprintf("Categoria %s já existe", cat.Name))
+			s.state.skipped++
+			continue
+		}
+
+		id, err := s.client.CreateCategory(menuID, cat.Name, cat.Order)
+		if err != nil {
+			s.logger.Error(fmt.Sprintf("Erro ao criar categoria %s: %v", cat.Name, err))
+			s.state.failed++
+			s.state.errors = append(s.state.errors, SeedError{
+				Type:    "category",
+				Item:    cat.Name,
+				Message: err.Error(),
+			})
+		} else {
+			categoryIDs[idx] = id.String()
+			s.logger.Info(fmt.Sprintf("Categoria criada: %s", cat.Name))
+			s.state.created++
+		}
+	}
+
+	// PASSO 5: Criar Subcategorias
+	fmt.Println("\n========== Passo 5: Criando Subcategorias ==========")
+	subcategoryIDs := make(map[int]string) // idx -> UUID
+	for idx, subcat := range s.seedData.Subcategories {
+		catID, ok := categoryIDs[subcat.CategoryIDRef]
+		if !ok {
+			s.logger.Error(fmt.Sprintf("Categoria não encontrada para subcategoria %s", subcat.Name))
+			s.state.failed++
+			continue
+		}
+
+		// Verificar se subcategoria já existe
+		existingID, err := s.client.GetSubcategoryByName(subcat.Name)
+		if err == nil && existingID != uuid.Nil {
+			subcategoryIDs[idx] = existingID.String()
+			s.logger.Info(fmt.Sprintf("Subcategoria %s já existe", subcat.Name))
+			s.state.skipped++
+			continue
+		}
+
+		id, err := s.client.CreateSubcategory(catID, subcat.Name)
+		if err != nil {
+			s.logger.Error(fmt.Sprintf("Erro ao criar subcategoria %s: %v", subcat.Name, err))
+			s.state.failed++
+			s.state.errors = append(s.state.errors, SeedError{
+				Type:    "subcategory",
+				Item:    subcat.Name,
+				Message: err.Error(),
+			})
+		} else {
+			subcategoryIDs[idx] = id.String()
+			s.logger.Info(fmt.Sprintf("Subcategoria criada: %s", subcat.Name))
+			s.state.created++
+		}
+	}
+
+	// PASSO 6: Criar Ambientes
+	fmt.Println("\n========== Passo 6: Criando Ambientes ==========")
+	envIDs := make(map[int]string) // idx -> UUID
+	for idx, env := range s.seedData.Environments {
+		// Verificar se ambiente já existe
+		existingID, err := s.client.GetEnvironmentByName(env.Name)
+		if err == nil && existingID != uuid.Nil {
+			envIDs[idx] = existingID.String()
+			s.logger.Info(fmt.Sprintf("Ambiente %s já existe", env.Name))
+			s.state.skipped++
+			continue
+		}
+
+		id, err := s.client.CreateEnvironment(env.Name, env.Capacity)
+		if err != nil {
+			s.logger.Error(fmt.Sprintf("Erro ao criar ambiente %s: %v", env.Name, err))
+			s.state.failed++
+			s.state.errors = append(s.state.errors, SeedError{
+				Type:    "environment",
+				Item:    env.Name,
+				Message: err.Error(),
+			})
+		} else {
+			envIDs[idx] = id.String()
+			s.logger.Info(fmt.Sprintf("Ambiente criado: %s", env.Name))
+			s.state.created++
+		}
+	}
+
+	// PASSO 7: Criar Mesas
+	fmt.Println("\n========== Passo 7: Criando Mesas ==========")
+	tableIDs := make(map[int]string) // idx -> UUID
+	for idx, tbl := range s.seedData.Tables {
+		// Verificar se mesa já existe
+		existingID, err := s.client.GetTableByNumber(tbl.Number)
+		if err == nil && existingID != uuid.Nil {
+			tableIDs[idx] = existingID.String()
+			s.logger.Info(fmt.Sprintf("Mesa %d já existe", tbl.Number))
+			s.state.skipped++
+			continue
+		}
+
+		var envID *string
+		if tbl.EnvironmentIDRef >= 0 && tbl.EnvironmentIDRef < len(s.seedData.Environments) {
+			if id, ok := envIDs[tbl.EnvironmentIDRef]; ok {
+				envID = &id
+			}
+		}
+
+		id, err := s.client.CreateTable(tbl.Number, tbl.Capacity, envID, "livre")
+		if err != nil {
+			s.logger.Error(fmt.Sprintf("Erro ao criar mesa %d: %v", tbl.Number, err))
+			s.state.failed++
+			s.state.errors = append(s.state.errors, SeedError{
+				Type:    "table",
+				Item:    fmt.Sprintf("mesa_%d", tbl.Number),
+				Message: err.Error(),
+			})
+		} else {
+			tableIDs[idx] = id.String()
+			s.logger.Info(fmt.Sprintf("Mesa criada: %d", tbl.Number))
+			s.state.created++
+		}
+	}
+
+	// PASSO 8: Criar Produtos
+	fmt.Println("\n========== Passo 8: Criando Produtos ==========")
+	for _, prod := range s.seedData.Products {
+		// Verificar se produto já existe
+		existingID, err := s.client.GetProductByName(prod.Name)
+		if err == nil && existingID != uuid.Nil {
+			s.logger.Info(fmt.Sprintf("Produto %s já existe", prod.Name))
+			s.state.skipped++
+			continue
+		}
+
+		var menuID, catID, subcatID *string
+
+		// Obter menu_id
+		if prod.MenuIDRef >= 0 && prod.MenuIDRef < len(s.seedData.Menus) {
+			if id, ok := menuIDs[prod.MenuIDRef]; ok {
+				menuID = &id
+			}
+		}
+
+		if prod.CategoryIDRef >= 0 && prod.CategoryIDRef < len(s.seedData.Categories) {
+			if id, ok := categoryIDs[prod.CategoryIDRef]; ok {
+				catID = &id
+			}
+		}
+
+		if prod.SubcategoryIDRef >= 0 && prod.SubcategoryIDRef < len(s.seedData.Subcategories) {
+			if id, ok := subcategoryIDs[prod.SubcategoryIDRef]; ok {
+				subcatID = &id
+			}
+		}
+
+		_, err = s.client.CreateProduct(
+			prod.Name,
+			prod.Type,
+			prod.PriceNormal,
+			prod.PrepTimeMinutes,
+			menuID,
+			catID,
+			subcatID,
+		)
+
+		if err != nil {
+			s.logger.Error(fmt.Sprintf("Erro ao criar produto %s: %v", prod.Name, err))
+			s.state.failed++
+			s.state.errors = append(s.state.errors, SeedError{
+				Type:    "product",
+				Item:    prod.Name,
+				Message: err.Error(),
+			})
+		} else {
+			s.logger.Info(fmt.Sprintf("Produto criado: %s (%s)", prod.Name, prod.Type))
+			s.state.created++
+		}
+	}
+
+	// PASSO 9: Criar Usuários
+	fmt.Println("\n========== Passo 9: Criando Usuários ==========")
+	userIDs := make(map[int]string) // idx -> UUID
+	for idx, user := range s.seedData.Users {
+		// Verificar se usuário já existe
+		existingID, err := s.client.GetUserByEmail(user.Email)
+		if err == nil && existingID != uuid.Nil {
+			userIDs[idx] = existingID.String()
+			s.logger.Info(fmt.Sprintf("Usuário %s já existe", user.Email))
+			s.state.skipped++
+			continue
+		}
+
+		id, err := s.client.CreateUser(user.Name, user.Email, user.Password, user.Role, user.Permissions)
+		if err != nil {
+			s.logger.Error(fmt.Sprintf("Erro ao criar usuário %s: %v", user.Email, err))
+			s.state.failed++
+			s.state.errors = append(s.state.errors, SeedError{
+				Type:    "user",
+				Item:    user.Email,
+				Message: err.Error(),
+			})
+		} else {
+			userIDs[idx] = id.String()
+			s.logger.Info(fmt.Sprintf("Usuário criado: %s (%s)", user.Email, user.Role))
+			s.state.created++
+		}
+	}
+
+	// PASSO 10: Criar Clientes
+	fmt.Println("\n========== Passo 10: Criando Clientes ==========")
+	customerIDs := make(map[int]string) // idx -> UUID
+	for idx, cust := range s.seedData.Customers {
+		// Verificar se cliente já existe
+		existingID, err := s.client.GetCustomerByEmail(cust.Email)
+		if err == nil && existingID != uuid.Nil {
+			customerIDs[idx] = existingID.String()
+			s.logger.Info(fmt.Sprintf("Cliente %s já existe", cust.Email))
+			s.state.skipped++
+			continue
+		}
+
+		id, err := s.client.CreateCustomer(cust.Name, cust.Email, cust.Phone, cust.BirthDate, cust.Notes)
+		if err != nil {
+			s.logger.Error(fmt.Sprintf("Erro ao criar cliente %s: %v", cust.Email, err))
+			s.state.failed++
+			s.state.errors = append(s.state.errors, SeedError{
+				Type:    "customer",
+				Item:    cust.Email,
+				Message: err.Error(),
+			})
+		} else {
+			customerIDs[idx] = id.String()
+			s.logger.Info(fmt.Sprintf("Cliente criado: %s", cust.Email))
+			s.state.created++
+		}
+	}
+
+	// PASSO 11: Criar Tags
+	fmt.Println("\n========== Passo 11: Criando Tags ==========")
+	tagIDs := make(map[int]string) // idx -> UUID
+	for idx, tag := range s.seedData.Tags {
+		// Verificar se tag já existe
+		existingID, err := s.client.GetTagByName(tag.Name)
+		if err == nil && existingID != uuid.Nil {
+			tagIDs[idx] = existingID.String()
+			s.logger.Info(fmt.Sprintf("Tag %s já existe", tag.Name))
+			s.state.skipped++
+			continue
+		}
+
+		id, err := s.client.CreateTag(tag.Name, tag.Color, tag.Description, tag.EntityType)
+		if err != nil {
+			s.logger.Error(fmt.Sprintf("Erro ao criar tag %s: %v", tag.Name, err))
+			s.state.failed++
+			s.state.errors = append(s.state.errors, SeedError{
+				Type:    "tag",
+				Item:    tag.Name,
+				Message: err.Error(),
+			})
+		} else {
+			tagIDs[idx] = id.String()
+			s.logger.Info(fmt.Sprintf("Tag criada: %s", tag.Name))
+			s.state.created++
+		}
+	}
+
+	// PASSO 12: Criar Reservas
+	fmt.Println("\n========== Passo 12: Criando Reservas ==========")
+	for _, res := range s.seedData.Reservations {
+		// Obter IDs dos clientes e mesas
+		custID, ok := customerIDs[res.CustomerIDRef]
+		if !ok {
+			s.logger.Error(fmt.Sprintf("Cliente não encontrado para reserva"))
+			s.state.failed++
+			continue
+		}
+
+		tblID, ok := tableIDs[res.TableIDRef]
+		if !ok {
+			s.logger.Error(fmt.Sprintf("Mesa não encontrada para reserva"))
+			s.state.failed++
+			continue
+		}
+
+		// Verificar se reserva já existe (pela confirmation_key)
+		existingID, err := s.client.GetReservationByConfirmationKey(res.ConfirmationKey)
+		if err == nil && existingID != uuid.Nil {
+			s.logger.Info(fmt.Sprintf("Reserva %s já existe", res.ConfirmationKey))
+			s.state.skipped++
+			continue
+		}
+
+		_, err = s.client.CreateReservation(
+			custID,
+			tblID,
+			res.DateTime,
+			res.PartySize,
+			res.Notes,
+			res.Status,
+			res.ConfirmationKey,
+		)
+
+		if err != nil {
+			s.logger.Error(fmt.Sprintf("Erro ao criar reserva %s: %v", res.ConfirmationKey, err))
+			s.state.failed++
+			s.state.errors = append(s.state.errors, SeedError{
+				Type:    "reservation",
+				Item:    res.ConfirmationKey,
+				Message: err.Error(),
+			})
+		} else {
+			s.logger.Info(fmt.Sprintf("Reserva criada: %s (%d pessoas)", res.ConfirmationKey, res.PartySize))
+			s.state.created++
+		}
+	}
+
+	return nil
+}
+
+// createOrganization cria organização ou faz login se existir
+func (s *SeedServiceV2) createOrganization() (orgID, projID, email string, err error) {
+	email = s.config.GetAutoEmail()
+	password := "senha123"
+
+	// Tentar criar
+	orgID, projID, err = s.client.CreateOrganization(
+		s.config.Auth.OrganizationName,
+		email,
+		password,
+	)
+
+	if err != nil {
+		// Se falhou, tentar login com o email que tentamos criar
+		// (pois a organização pode já existir com essas credenciais)
+		s.logger.Info(fmt.Sprintf("Organização pode já existir, tentando login com %s", email))
+		orgID, projID, err = s.client.LoginAndGetIDs(email, password)
+
+		if err != nil {
+			// Se ainda falhar, tentar com fallback
+			s.logger.Info(fmt.Sprintf("Tentando fallback com %s", s.config.Auth.FallbackEmail))
+			orgID, projID, err = s.client.LoginAndGetIDs(
+				s.config.Auth.FallbackEmail,
+				s.config.Auth.FallbackPassword,
+			)
+			if err == nil {
+				email = s.config.Auth.FallbackEmail
+			}
+		}
+	}
+
+	return orgID, projID, email, err
+}
+
+// login faz login de um usuário
+func (s *SeedServiceV2) login(email string) error {
+	password := "senha123"
+
+	_, _, err := s.client.LoginAndGetIDs(email, password)
+	return err
+}
+
+// LoadSeedData carrega dados do arquivo JSON
+func LoadSeedData(filename string) (*SeedData, error) {
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao ler arquivo: %w", err)
+	}
+
+	var seedData SeedData
+	if err := json.Unmarshal(data, &seedData); err != nil {
+		return nil, fmt.Errorf("erro ao parsear JSON: %w", err)
+	}
+
+	return &seedData, nil
+}
