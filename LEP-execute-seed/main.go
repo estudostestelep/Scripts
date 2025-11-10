@@ -274,6 +274,7 @@ func (s *SeedServiceV2) Execute(ctx context.Context) error {
 			continue
 		}
 
+		// Se não existe, criar nova
 		id, err := s.client.CreateCategory(menuID, cat.Name, cat.Order)
 		if err != nil {
 			s.logger.Error(fmt.Sprintf("Erro ao criar categoria %s: %v", cat.Name, err))
