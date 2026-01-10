@@ -1,5 +1,5 @@
 server:
-  url: http://localhost:8080
+  url: https://lep-system-341885235510.us-central1.run.app
   timeout: 30
 
 auth:

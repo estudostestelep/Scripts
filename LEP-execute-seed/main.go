@@ -308,6 +308,11 @@ func (s *SeedServiceV2) Execute(ctx context.Context) error {
 			subcategoryIDs[idx] = existingID.String()
 			s.logger.Info(fmt.Sprintf("Subcategoria %s já existe", subcat.Name))
 			s.state.skipped++
+			// Ainda precisamos vincular à categoria
+			err = s.client.AddCategoryToSubcategory(existingID.String(), catID)
+			if err != nil {
+				s.logger.Debug(fmt.Sprintf("Relação subcategoria-categoria já existe ou erro: %v", err))
+			}
 			continue
 		}
 
@@ -324,6 +329,15 @@ func (s *SeedServiceV2) Execute(ctx context.Context) error {
 			subcategoryIDs[idx] = id.String()
 			s.logger.Info(fmt.Sprintf("Subcategoria criada: %s", subcat.Name))
 			s.state.created++
+
+			// Vincular subcategoria à categoria (relacionamento N:M)
+			err = s.client.AddCategoryToSubcategory(id.String(), catID)
+			if err != nil {
+				s.logger.Error(fmt.Sprintf("Erro ao vincular subcategoria %s à categoria: %v", subcat.Name, err))
+				s.state.failed++
+			} else {
+				s.logger.Info(fmt.Sprintf("Subcategoria %s vinculada à categoria", subcat.Name))
+			}
 		}
 	}
 
@@ -394,10 +408,12 @@ func (s *SeedServiceV2) Execute(ctx context.Context) error {
 
 	// PASSO 8: Criar Produtos
 	fmt.Println("\n========== Passo 8: Criando Produtos ==========")
-	for _, prod := range s.seedData.Products {
+	productIDs := make(map[int]string) // idx -> UUID (para ProductTags)
+	for idx, prod := range s.seedData.Products {
 		// Verificar se produto já existe
 		existingID, err := s.client.GetProductByName(prod.Name)
 		if err == nil && existingID != uuid.Nil {
+			productIDs[idx] = existingID.String()
 			s.logger.Info(fmt.Sprintf("Produto %s já existe", prod.Name))
 			s.state.skipped++
 			continue
@@ -424,7 +440,23 @@ func (s *SeedServiceV2) Execute(ctx context.Context) error {
 			}
 		}
 
-		_, err = s.client.CreateProduct(
+		// Preparar dados de vinho se aplicável
+		var wineData *WineData
+		if prod.Type == "vinho" && (prod.Vintage != "" || prod.Country != "" || prod.Region != "") {
+			wineData = &WineData{
+				Vintage:        prod.Vintage,
+				Country:        prod.Country,
+				Region:         prod.Region,
+				Winery:         prod.Winery,
+				WineType:       prod.WineType,
+				Volume:         prod.Volume,
+				AlcoholContent: prod.AlcoholContent,
+				PriceBottle:    prod.PriceBottle,
+				PriceGlass:     prod.PriceGlass,
+			}
+		}
+
+		id, err := s.client.CreateProduct(
 			prod.Name,
 			prod.Type,
 			prod.PriceNormal,
@@ -432,6 +464,7 @@ func (s *SeedServiceV2) Execute(ctx context.Context) error {
 			menuID,
 			catID,
 			subcatID,
+			wineData,
 		)
 
 		if err != nil {
@@ -443,7 +476,12 @@ func (s *SeedServiceV2) Execute(ctx context.Context) error {
 				Message: err.Error(),
 			})
 		} else {
-			s.logger.Info(fmt.Sprintf("Produto criado: %s (%s)", prod.Name, prod.Type))
+			productIDs[idx] = id.String()
+			if wineData != nil {
+				s.logger.Info(fmt.Sprintf("Produto criado: %s (%s) - %s %s", prod.Name, prod.Type, prod.Country, prod.Vintage))
+			} else {
+				s.logger.Info(fmt.Sprintf("Produto criado: %s (%s)", prod.Name, prod.Type))
+			}
 			s.state.created++
 		}
 	}
@@ -585,6 +623,107 @@ func (s *SeedServiceV2) Execute(ctx context.Context) error {
 		}
 	}
 
+	// PASSO 13: Criar Product Tags (relacionamento N:M)
+	fmt.Println("\n========== Passo 13: Criando Product Tags ==========")
+	if len(s.seedData.ProductTags) > 0 {
+		for _, pt := range s.seedData.ProductTags {
+			prodID, ok := productIDs[pt.ProductIDRef]
+			if !ok {
+				s.logger.Error(fmt.Sprintf("Produto não encontrado para tag"))
+				s.state.failed++
+				continue
+			}
+
+			tagID, ok := tagIDs[pt.TagIDRef]
+			if !ok {
+				s.logger.Error(fmt.Sprintf("Tag não encontrada para produto"))
+				s.state.failed++
+				continue
+			}
+
+			err := s.client.AddTagToProduct(prodID, tagID)
+			if err != nil {
+				s.logger.Error(fmt.Sprintf("Erro ao vincular tag ao produto: %v", err))
+				s.state.failed++
+			} else {
+				s.logger.Info(fmt.Sprintf("Tag vinculada ao produto"))
+				s.state.created++
+			}
+		}
+	} else {
+		s.logger.Info("Nenhum ProductTag definido no seed")
+	}
+
+	// PASSO 14: Criar Settings
+	fmt.Println("\n========== Passo 14: Criando Settings ==========")
+	if s.seedData.Settings.Timezone != "" || s.seedData.Settings.ReservationMinAdvanceHours > 0 {
+		err := s.client.CreateSettings(&s.seedData.Settings)
+		if err != nil {
+			s.logger.Error(fmt.Sprintf("Erro ao criar settings: %v", err))
+			s.state.failed++
+			s.state.errors = append(s.state.errors, SeedError{
+				Type:    "settings",
+				Item:    "project_settings",
+				Message: err.Error(),
+			})
+		} else {
+			s.logger.Info("Settings criado/atualizado com sucesso")
+			s.state.created++
+		}
+	} else {
+		s.logger.Info("Nenhum Settings definido no seed")
+	}
+
+	// PASSO 15: Criar Notification Templates
+	fmt.Println("\n========== Passo 15: Criando Notification Templates ==========")
+	if len(s.seedData.NotificationTemplates) > 0 {
+		for _, tmpl := range s.seedData.NotificationTemplates {
+			// Verificar se template já existe
+			existingID, err := s.client.GetNotificationTemplateByName(tmpl.Name)
+			if err == nil && existingID != uuid.Nil {
+				s.logger.Info(fmt.Sprintf("Template %s já existe", tmpl.Name))
+				s.state.skipped++
+				continue
+			}
+
+			_, err = s.client.CreateNotificationTemplate(&tmpl)
+			if err != nil {
+				s.logger.Error(fmt.Sprintf("Erro ao criar template %s: %v", tmpl.Name, err))
+				s.state.failed++
+				s.state.errors = append(s.state.errors, SeedError{
+					Type:    "notification_template",
+					Item:    tmpl.Name,
+					Message: err.Error(),
+				})
+			} else {
+				s.logger.Info(fmt.Sprintf("Template criado: %s (%s)", tmpl.Name, tmpl.Channel))
+				s.state.created++
+			}
+		}
+	} else {
+		s.logger.Info("Nenhum NotificationTemplate definido no seed")
+	}
+
+	// PASSO 16: Criar Theme Customization
+	fmt.Println("\n========== Passo 16: Criando Theme Customization ==========")
+	if s.seedData.ThemeCustomization.PrimaryColor != "" {
+		err := s.client.CreateThemeCustomization(&s.seedData.ThemeCustomization)
+		if err != nil {
+			s.logger.Error(fmt.Sprintf("Erro ao criar theme customization: %v", err))
+			s.state.failed++
+			s.state.errors = append(s.state.errors, SeedError{
+				Type:    "theme",
+				Item:    "theme_customization",
+				Message: err.Error(),
+			})
+		} else {
+			s.logger.Info("Theme Customization criado/atualizado com sucesso")
+			s.state.created++
+		}
+	} else {
+		s.logger.Info("Nenhum ThemeCustomization definido no seed")
+	}
+
 	return nil
 }
 
@@ -608,10 +747,12 @@ func (s *SeedServiceV2) createOrganization() (orgID, projID, email string, err e
 
 		if err != nil {
 			// Se ainda falhar, tentar com fallback
-			s.logger.Info(fmt.Sprintf("Tentando fallback com %s", s.config.Auth.FallbackEmail))
-			orgID, projID, err = s.client.LoginAndGetIDs(
+			// IMPORTANTE: Usar LoginAndGetIDsForOrg para buscar especificamente a organização "LEP Fattoria"
+			s.logger.Info(fmt.Sprintf("Tentando fallback com %s para organização '%s'", s.config.Auth.FallbackEmail, s.config.Auth.OrganizationName))
+			orgID, projID, err = s.client.LoginAndGetIDsForOrg(
 				s.config.Auth.FallbackEmail,
 				s.config.Auth.FallbackPassword,
+				s.config.Auth.OrganizationName,
 			)
 			if err == nil {
 				email = s.config.Auth.FallbackEmail
