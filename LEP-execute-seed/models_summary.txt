@@ -1,0 +1,205 @@
+=== LEP BACKEND MODELS COMPLETE REFERENCE ===
+
+Generated: sáb,  8 de nov de 2025 16:31:53
+
+1. USER
+   Table: users
+   Fields: id(UUID-PK), name(string), email(string-unique), password(string-hashed),
+           permissions(string[]), active(bool-default:true), timestamps
+
+2. CUSTOMER
+   Table: customers (Multi-tenant)
+   Fields: id(UUID-PK), organization_id(UUID), project_id(UUID), name, email,
+           phone, birth_date(optional), timestamps
+
+3. TABLE
+   Table: tables (Multi-tenant)
+   Fields: id(UUID-PK), organization_id, project_id, environment_id(optional),
+           number(int), capacity(int), location, status(libre/ocupada/reservada), timestamps
+
+4. PRODUCT
+   Table: products (Multi-tenant)
+   Fields: id(UUID-PK), organization_id, project_id, name, description, image_url,
+           type(prato/bebida/vinho), price_normal, price_promo, category_id, subcategory_id,
+           volume, alcohol_content, vintage, country, region, winery, wine_type, grapes,
+           price_bottle, price_half_bottle, price_glass, stock, prep_time_minutes, timestamps
+
+5. ORDER
+   Table: orders (Multi-tenant)
+   Fields: id(UUID-PK), organization_id, project_id, table_id, table_number, customer_id,
+           items(OrderItems-JSONB), total_amount, note, source(internal/public),
+           status(pending/preparing/ready/delivered/cancelled), estimated_prep_time_minutes,
+           estimated_delivery_time, started_at, ready_at, delivered_at, timestamps
+
+6. RESERVATION
+   Table: reservations (Multi-tenant)
+   Fields: id(UUID-PK), organization_id, project_id, customer_id(FK), table_id(FK),
+           datetime(ISO8601), party_size, note, status(confirmed/cancelled/completed/no_show), timestamps
+
+7. WAITLIST
+   Table: waitlists (Multi-tenant)
+   Fields: id(UUID-PK), organization_id, project_id, customer_id(FK), people(int),
+           status(waiting/notified/seated), timestamps
+
+8. MENU
+   Table: menus (Multi-tenant)
+   Fields: id(UUID-PK), organization_id, project_id, name, styling(JSON),
+           order(int), active(bool), time_range_start, time_range_end, priority,
+           is_manual_override, applicable_days(JSON), applicable_dates(JSON), timestamps
+
+9. CATEGORY
+   Table: categories (Multi-tenant)
+   Fields: id(UUID-PK), organization_id, project_id, menu_id(FK), name,
+           image_url(optional), notes, order(int), active(bool), timestamps
+
+
+10. SUBCATEGORY
+   Table: subcategories (Multi-tenant)
+   Fields: id(UUID-PK), organization_id, project_id, name, photo(optional),
+           notes(optional), order(int), active(bool), timestamps
+
+11. ORGANIZATION
+   Table: organizations
+   Fields: id(UUID-PK), name, email(unique), phone, address, website, description,
+           active(bool-default:true), timestamps
+
+12. PROJECT
+   Table: projects
+   Fields: id(UUID-PK), organization_id(FK), name, description,
+           twilio_account_sid, twilio_auth_token, twilio_phone, whatsapp_business_number,
+           smtp_host, smtp_port, smtp_username, smtp_password, smtp_from,
+           timezone(default:America/Sao_Paulo), active(bool), timestamps
+
+13. ENVIRONMENT
+   Table: environments (Multi-tenant)
+   Fields: id(UUID-PK), organization_id, project_id, name, description,
+           capacity(int), active(bool), timestamps
+
+14. TAG
+   Table: tags (Multi-tenant)
+   Fields: id(UUID-PK), organization_id, project_id, name, color(hex-optional),
+           description(optional), entity_type(optional), active(bool), timestamps
+
+15. SETTINGS
+   Table: settings (Multi-tenant)
+   Fields: id(UUID-PK), organization_id, project_id,
+           min_advance_hours(default:2), max_advance_days(default:30),
+           notify_reservation_create, notify_reservation_update, notify_reservation_cancel,
+           notify_table_available, notify_confirmation_24h,
+           default_notification_channel(default:sms), enable_sms, enable_email, enable_whatsapp,
+           timestamps
+
+16. NOTIFICATION CONFIG
+   Table: notification_configs (Multi-tenant)
+   Fields: id(UUID-PK), organization_id, project_id, event_type, enabled(bool),
+           channels(string[]), template_id(optional-FK), timestamps
+
+17. NOTIFICATION TEMPLATE
+   Table: notification_templates (Multi-tenant)
+   Fields: id(UUID-PK), organization_id, project_id, name,
+           channel(sms/email/whatsapp), subject(optional), body, variables(string[]),
+           active(bool), timestamps
+
+18. NOTIFICATION LOG
+   Table: notification_logs (Multi-tenant)
+   Fields: id(UUID-PK), organization_id, project_id, event_type, channel,
+           recipient, subject(optional), message, status, external_id(optional),
+           error_message(optional), delivered_at(optional), timestamps
+
+19. FILE REFERENCE
+   Table: file_references (Multi-tenant)
+   Fields: id(UUID-PK), organization_id, project_id, file_hash(SHA256-unique),
+           file_path, file_size(int64), category, mime_type, reference_count(default:1),
+           created_at, last_accessed_at(optional), deleted_at(nullable)
+
+20. THEME CUSTOMIZATION
+   Table: theme_customizations
+   Fields: id(UUID-PK), project_id(unique), organization_id,
+           27 color fields (light/dark/semantic/system colors),
+           disabled_opacity(float64), shadow_intensity(float64),
+           is_active(bool), timestamps
+
+================================================================================
+KEY CHARACTERISTICS
+================================================================================
+
+Multi-Tenant Models:
+  - Customer, Environment, Table, Menu, Category, Subcategory, Product, Tag
+  - Order, Reservation, Waitlist, Settings, Notification*
+  - Include: organization_id, project_id for data isolation
+
+Soft Deletes:
+  - All models include deleted_at (nullable timestamp)
+  - Logical deletion instead of physical removal
+
+JSON/JSONB Fields:
+  - Menu.styling (JSON)
+  - Order.items (JSONB array of OrderItem objects)
+  - OrderItem structure: {product_id, quantity, price, notes}
+
+Enums/Fixed Values:
+  - User role: owner, admin, member
+  - UserProject role: manager, waiter, admin
+  - Table.status: libre, ocupada, reservada
+  - Product.type: prato, bebida, vinho
+  - Order.source: internal, public
+  - Order.status: pending, preparing, ready, delivered, cancelled
+  - Reservation.status: confirmed, cancelled, completed, no_show
+  - Waitlist.status: waiting, notified, seated
+  - Notification channels: sms, email, whatsapp
+
+Primary Keys:
+  - UUID (auto-generated using github.com/google/uuid)
+  - No composite keys used
+
+Foreign Keys:
+  - Standard UUID foreign key references
+  - Some with cascade delete/update constraints
+
+================================================================================
+CRITICAL FOR SEED DATA GENERATION
+================================================================================
+
+Required Fields (Cannot be NULL):
+  - Organization: name
+  - User: name, email, password (must be bcrypt hashed)
+  - Project: organization_id, name
+  - Customer: organization_id, project_id, name, email, phone
+  - Environment: organization_id, project_id, name, capacity
+  - Table: organization_id, project_id, number, capacity
+  - Menu: organization_id, project_id, name
+  - Category: organization_id, project_id, menu_id, name
+  - Product: organization_id, project_id, name, type, price_normal
+  - Order: organization_id, project_id, items, total_amount, source, status
+  - Reservation: organization_id, project_id, customer_id, table_id, datetime, party_size, status
+  - Waitlist: organization_id, project_id, customer_id, people, status
+
+Timestamp Handling:
+  - created_at, updated_at: auto-managed by GORM (set to current time)
+  - deleted_at: null by default, set when soft-deleting
+
+Default Values to Use:
+  - active: true (for models with this field)
+  - status: varies by model (use defaults in struct definitions)
+  - timezone: 'America/Sao_Paulo' (for Project)
+
+Password Hashing:
+  - MUST use bcrypt to hash passwords before inserting
+  - Never store plain-text passwords
+  - bcrypt work factor: typically 10-12
+
+PostgreSQL-Specific:
+  - String arrays: use pq.StringArray type
+  - JSON/JSONB: stored as text/binary, marshaled to structs
+  - UUID type: use github.com/google/uuid package
+
+Relationships:
+  - Foreign keys: standard UUID references
+  - Many-to-many: join tables (e.g., product_tags)
+  - One-to-many: implicit via FK
+
+Order Items (Embedded):
+  - Stored as JSONB in Order.items field
+  - Not a separate database table
+  - Array structure: [{product_id, quantity, price, notes}, ...]
+

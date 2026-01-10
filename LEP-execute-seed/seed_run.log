@@ -1,0 +1,12 @@
+# command-line-arguments
+.\main.go:15:17: undefined: LoadConfig
+.\main.go:30:12: undefined: NewLogger
+.\main.go:42:12: undefined: NewAPIClientV2
+.\main.go:142:52: undefined: Logger
+.\main.go:169:12: undefined: APIClientV2
+.\main.go:170:12: undefined: Logger
+.\main.go:171:12: undefined: Config
+.\main.go:172:12: undefined: SeedData
+.\main.go:444:17: undefined: WineData
+.\main.go:773:38: undefined: SeedData
+.\main.go:444:17: too many errors
