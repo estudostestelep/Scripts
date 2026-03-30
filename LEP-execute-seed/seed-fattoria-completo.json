@@ -1,0 +1,1272 @@
+{
+  "_comentario_campos_nao_criaveis_via_ia": {
+    "descricao": "Campos que NÃO podem ser criados automaticamente via seed/IA e requerem ação manual ou integração específica",
+    "campos": {
+      "imagens_reais": "As URLs de imagem são placeholders do Unsplash. Para produção, faça upload via endpoint POST /upload/products/:id",
+      "notificacoes_whatsapp": "Requer configuração de credenciais do WhatsApp Business API no painel admin",
+      "notificacoes_sms": "Requer configuração de provedor SMS (Twilio, etc.) no painel admin",
+      "integracao_pagamentos": "Configurar gateway de pagamento (Stripe, PagSeguro, etc.) manualmente",
+      "qr_codes_mesa": "Gerados automaticamente pelo backend ao criar mesas, não configuráveis via seed",
+      "templates_email_html": "Templates com HTML complexo devem ser editados via painel admin",
+      "horarios_funcionamento": "Configurar via painel admin em Settings > Horários",
+      "dominio_personalizado": "Configurar DNS e certificado SSL no provedor de hospedagem",
+      "webhook_integracoes": "Configurar URLs de callback para sistemas externos via painel admin",
+      "backup_automatico": "Configurar políticas de backup no provedor de cloud"
+    },
+    "endpoints_404_conhecidos": [
+      "POST /settings - Endpoint não implementado em produção",
+      "POST /notification-template - Endpoint não implementado em produção",
+      "POST /theme-customization - Endpoint não implementado em produção"
+    ]
+  },
+
+  "organization": {
+    "name": "Fattoria",
+    "email": "contato@fattoria.com.br",
+    "phone": "+55 11 3456-7890",
+    "address": "Rua Augusta, 2500 - Jardins, São Paulo - SP, 01412-100",
+    "website": "https://fattoria.com.br",
+    "description": "Autêntica culinária italiana com ingredientes frescos importados diretamente da Itália. Ambiente aconchegante e carta de vinhos premiada.",
+    "active": true
+  },
+
+  "menus": [
+    {
+      "name": "Menu Principal",
+      "description": "Cardápio completo com todas as nossas especialidades italianas",
+      "active": true,
+      "order": 1,
+      "priority": 1,
+      "time_range_start": "11:00",
+      "time_range_end": "23:00",
+      "applicable_days": "1,2,3,4,5,6,0"
+    },
+    {
+      "name": "Menu Almoço Executivo",
+      "description": "Opções rápidas e deliciosas para o almoço de negócios",
+      "active": true,
+      "order": 2,
+      "priority": 2,
+      "time_range_start": "11:30",
+      "time_range_end": "15:00",
+      "applicable_days": "1,2,3,4,5"
+    },
+    {
+      "name": "Menu Degustação",
+      "description": "Experiência gastronômica completa com harmonização de vinhos",
+      "active": true,
+      "order": 3,
+      "priority": 3,
+      "time_range_start": "19:00",
+      "time_range_end": "23:00",
+      "applicable_days": "4,5,6"
+    },
+    {
+      "name": "Menu Brunch Domenica",
+      "description": "Brunch italiano especial aos domingos",
+      "active": true,
+      "order": 4,
+      "priority": 4,
+      "time_range_start": "10:00",
+      "time_range_end": "15:00",
+      "applicable_days": "0"
+    },
+    {
+      "name": "Carta de Vinhos",
+      "description": "Seleção premium de vinhos italianos e internacionais",
+      "active": true,
+      "order": 5,
+      "priority": 5,
+      "time_range_start": "11:00",
+      "time_range_end": "23:00",
+      "applicable_days": "1,2,3,4,5,6,0"
+    }
+  ],
+
+  "categories": [
+    {
+      "name": "Antipasti",
+      "description": "Entradas frias e quentes da tradição italiana",
+      "menu_id_ref": 0,
+      "active": true,
+      "order": 1
+    },
+    {
+      "name": "Primi Piatti",
+      "description": "Massas artesanais feitas diariamente",
+      "menu_id_ref": 0,
+      "active": true,
+      "order": 2
+    },
+    {
+      "name": "Secondi Piatti",
+      "description": "Carnes e peixes preparados com maestria",
+      "menu_id_ref": 0,
+      "active": true,
+      "order": 3
+    },
+    {
+      "name": "Contorni",
+      "description": "Acompanhamentos e saladas frescas",
+      "menu_id_ref": 0,
+      "active": true,
+      "order": 4
+    },
+    {
+      "name": "Dolci",
+      "description": "Sobremesas italianas tradicionais",
+      "menu_id_ref": 0,
+      "active": true,
+      "order": 5
+    },
+    {
+      "name": "Bevande",
+      "description": "Bebidas não alcoólicas e cafés especiais",
+      "menu_id_ref": 0,
+      "active": true,
+      "order": 6
+    },
+    {
+      "name": "Vinhos Tintos",
+      "description": "Seleção de tintos italianos e internacionais",
+      "menu_id_ref": 4,
+      "active": true,
+      "order": 1
+    },
+    {
+      "name": "Vinhos Brancos",
+      "description": "Brancos refrescantes para harmonização",
+      "menu_id_ref": 4,
+      "active": true,
+      "order": 2
+    },
+    {
+      "name": "Espumantes",
+      "description": "Proseccos, Champagnes e espumantes",
+      "menu_id_ref": 4,
+      "active": true,
+      "order": 3
+    }
+  ],
+
+  "subcategories": [
+    {
+      "name": "Antipasti Freddi",
+      "description": "Entradas frias",
+      "category_id_ref": 0,
+      "active": true,
+      "order": 1
+    },
+    {
+      "name": "Antipasti Caldi",
+      "description": "Entradas quentes",
+      "category_id_ref": 0,
+      "active": true,
+      "order": 2
+    },
+    {
+      "name": "Pasta Fresca",
+      "description": "Massas frescas feitas na casa",
+      "category_id_ref": 1,
+      "active": true,
+      "order": 1
+    },
+    {
+      "name": "Pasta Secca",
+      "description": "Massas secas importadas",
+      "category_id_ref": 1,
+      "active": true,
+      "order": 2
+    },
+    {
+      "name": "Risotti",
+      "description": "Risotos cremosos com arroz arbóreo",
+      "category_id_ref": 1,
+      "active": true,
+      "order": 3
+    },
+    {
+      "name": "Carni",
+      "description": "Carnes nobres",
+      "category_id_ref": 2,
+      "active": true,
+      "order": 1
+    },
+    {
+      "name": "Pesce",
+      "description": "Frutos do mar frescos",
+      "category_id_ref": 2,
+      "active": true,
+      "order": 2
+    },
+    {
+      "name": "Piemonte",
+      "description": "Vinhos da região do Piemonte",
+      "category_id_ref": 6,
+      "active": true,
+      "order": 1
+    },
+    {
+      "name": "Toscana",
+      "description": "Vinhos da região da Toscana",
+      "category_id_ref": 6,
+      "active": true,
+      "order": 2
+    },
+    {
+      "name": "Veneto",
+      "description": "Vinhos da região do Vêneto",
+      "category_id_ref": 6,
+      "active": true,
+      "order": 3
+    }
+  ],
+
+  "environments": [
+    {
+      "name": "Salão Principal",
+      "description": "Ambiente principal com decoração clássica italiana e iluminação aconchegante",
+      "capacity": 60,
+      "active": true
+    },
+    {
+      "name": "Terraço",
+      "description": "Área externa coberta com vista para o jardim, ideal para dias agradáveis",
+      "capacity": 30,
+      "active": true
+    },
+    {
+      "name": "Sala Privativa",
+      "description": "Espaço reservado para eventos corporativos e celebrações especiais",
+      "capacity": 20,
+      "active": true
+    },
+    {
+      "name": "Bar & Lounge",
+      "description": "Área de bar com sofás confortáveis para aperitivos e degustação",
+      "capacity": 15,
+      "active": true
+    },
+    {
+      "name": "Cantina",
+      "description": "Adega climatizada com mesas para degustação exclusiva",
+      "capacity": 8,
+      "active": true
+    }
+  ],
+
+  "tables": [
+    {"number": 1, "capacity": 2, "location": "Janela", "status": "available", "environment_id_ref": 0},
+    {"number": 2, "capacity": 2, "location": "Janela", "status": "available", "environment_id_ref": 0},
+    {"number": 3, "capacity": 4, "location": "Centro", "status": "available", "environment_id_ref": 0},
+    {"number": 4, "capacity": 4, "location": "Centro", "status": "available", "environment_id_ref": 0},
+    {"number": 5, "capacity": 4, "location": "Centro", "status": "available", "environment_id_ref": 0},
+    {"number": 6, "capacity": 6, "location": "Parede", "status": "available", "environment_id_ref": 0},
+    {"number": 7, "capacity": 6, "location": "Parede", "status": "available", "environment_id_ref": 0},
+    {"number": 8, "capacity": 8, "location": "Canto", "status": "available", "environment_id_ref": 0},
+    {"number": 9, "capacity": 10, "location": "Reservado", "status": "available", "environment_id_ref": 0},
+    {"number": 10, "capacity": 2, "location": "Vista Jardim", "status": "available", "environment_id_ref": 1},
+    {"number": 11, "capacity": 4, "location": "Vista Jardim", "status": "available", "environment_id_ref": 1},
+    {"number": 12, "capacity": 4, "location": "Centro Terraço", "status": "available", "environment_id_ref": 1},
+    {"number": 13, "capacity": 6, "location": "Centro Terraço", "status": "available", "environment_id_ref": 1},
+    {"number": 14, "capacity": 8, "location": "Canto Terraço", "status": "available", "environment_id_ref": 1},
+    {"number": 15, "capacity": 20, "location": "Mesa Principal", "status": "available", "environment_id_ref": 2},
+    {"number": 16, "capacity": 4, "location": "Bar", "status": "available", "environment_id_ref": 3},
+    {"number": 17, "capacity": 4, "location": "Lounge", "status": "available", "environment_id_ref": 3},
+    {"number": 18, "capacity": 6, "location": "Lounge VIP", "status": "available", "environment_id_ref": 3},
+    {"number": 19, "capacity": 4, "location": "Adega", "status": "available", "environment_id_ref": 4},
+    {"number": 20, "capacity": 4, "location": "Adega Premium", "status": "available", "environment_id_ref": 4}
+  ],
+
+  "products": [
+    {
+      "name": "Burrata con Pomodorini",
+      "description": "Cremosa burrata italiana servida com tomates cereja confitados, rúcula fresca e redução de balsâmico de Modena",
+      "type": "prato",
+      "image_url": "https://images.unsplash.com/photo-1608897013039-887f21d8c804?w=800",
+      "price_normal": 68.00,
+      "menu_id_ref": 0,
+      "category_id_ref": 0,
+      "subcategory_id_ref": 0,
+      "active": true,
+      "order": 1,
+      "prep_time_minutes": 10
+    },
+    {
+      "name": "Carpaccio di Manzo",
+      "description": "Finas fatias de filé mignon cru com molho de mostarda e mel, alcaparras, rúcula e lascas de parmesão",
+      "type": "prato",
+      "image_url": "https://images.unsplash.com/photo-1544025162-d76694265947?w=800",
+      "price_normal": 72.00,
+      "menu_id_ref": 0,
+      "category_id_ref": 0,
+      "subcategory_id_ref": 0,
+      "active": true,
+      "order": 2,
+      "prep_time_minutes": 12
+    },
+    {
+      "name": "Vitello Tonnato",
+      "description": "Clássico piemontês de vitela fatiada com molho cremoso de atum, alcaparras e anchovas",
+      "type": "prato",
+      "image_url": "https://images.unsplash.com/photo-1625944525533-473f1a3d54e7?w=800",
+      "price_normal": 78.00,
+      "menu_id_ref": 0,
+      "category_id_ref": 0,
+      "subcategory_id_ref": 0,
+      "active": true,
+      "order": 3,
+      "prep_time_minutes": 8
+    },
+    {
+      "name": "Polpette al Sugo",
+      "description": "Almôndegas artesanais de carne bovina e suína em molho de tomate San Marzano com manjericão fresco",
+      "type": "prato",
+      "image_url": "https://images.unsplash.com/photo-1529042410759-befb1204b468?w=800",
+      "price_normal": 58.00,
+      "menu_id_ref": 0,
+      "category_id_ref": 0,
+      "subcategory_id_ref": 1,
+      "active": true,
+      "order": 4,
+      "prep_time_minutes": 15
+    },
+    {
+      "name": "Calamari Fritti",
+      "description": "Anéis de lula empanados crocantes servidos com aioli de limão siciliano",
+      "type": "prato",
+      "image_url": "https://images.unsplash.com/photo-1599487488170-d11ec9c172f0?w=800",
+      "price_normal": 65.00,
+      "menu_id_ref": 0,
+      "category_id_ref": 0,
+      "subcategory_id_ref": 1,
+      "active": true,
+      "order": 5,
+      "prep_time_minutes": 18
+    },
+    {
+      "name": "Arancini di Riso",
+      "description": "Bolinhos de risoto recheados com ragù e mozzarella, fritos até dourar",
+      "type": "prato",
+      "image_url": "https://images.unsplash.com/photo-1595295333158-4742f28fbd85?w=800",
+      "price_normal": 48.00,
+      "menu_id_ref": 0,
+      "category_id_ref": 0,
+      "subcategory_id_ref": 1,
+      "active": true,
+      "order": 6,
+      "prep_time_minutes": 12
+    },
+    {
+      "name": "Tagliatelle al Ragù Bolognese",
+      "description": "Massa fresca em tiras largas com autêntico ragù bolonhês cozido lentamente por 4 horas",
+      "type": "prato",
+      "image_url": "https://images.unsplash.com/photo-1621996346565-e3dbc646d9a9?w=800",
+      "price_normal": 78.00,
+      "menu_id_ref": 0,
+      "category_id_ref": 1,
+      "subcategory_id_ref": 2,
+      "active": true,
+      "order": 1,
+      "prep_time_minutes": 18
+    },
+    {
+      "name": "Pappardelle al Tartufo Nero",
+      "description": "Massa fresca larga com molho de trufas negras, manteiga e parmigiano reggiano 36 meses",
+      "type": "prato",
+      "image_url": "https://images.unsplash.com/photo-1556761223-4c4282c73f77?w=800",
+      "price_normal": 128.00,
+      "menu_id_ref": 0,
+      "category_id_ref": 1,
+      "subcategory_id_ref": 2,
+      "active": true,
+      "order": 2,
+      "prep_time_minutes": 20
+    },
+    {
+      "name": "Ravioli di Ricotta e Spinaci",
+      "description": "Raviolis recheados com ricota fresca e espinafre, servidos com manteiga de sálvia",
+      "type": "prato",
+      "image_url": "https://images.unsplash.com/photo-1587740908075-9e245070dfaa?w=800",
+      "price_normal": 72.00,
+      "menu_id_ref": 0,
+      "category_id_ref": 1,
+      "subcategory_id_ref": 2,
+      "active": true,
+      "order": 3,
+      "prep_time_minutes": 16
+    },
+    {
+      "name": "Tortellini in Brodo",
+      "description": "Delicados tortellinis recheados com carne servidos em caldo de galinha caipira",
+      "type": "prato",
+      "image_url": "https://images.unsplash.com/photo-1551183053-bf91a1d81141?w=800",
+      "price_normal": 68.00,
+      "menu_id_ref": 0,
+      "category_id_ref": 1,
+      "subcategory_id_ref": 2,
+      "active": true,
+      "order": 4,
+      "prep_time_minutes": 15
+    },
+    {
+      "name": "Spaghetti alle Vongole",
+      "description": "Espaguete com amêijoas frescas, alho, vinho branco e salsinha",
+      "type": "prato",
+      "image_url": "https://images.unsplash.com/photo-1563379926898-05f4575a45d8?w=800",
+      "price_normal": 88.00,
+      "menu_id_ref": 0,
+      "category_id_ref": 1,
+      "subcategory_id_ref": 3,
+      "active": true,
+      "order": 5,
+      "prep_time_minutes": 22
+    },
+    {
+      "name": "Penne all'Arrabbiata",
+      "description": "Penne al dente com molho de tomate apimentado, alho e azeite extra virgem",
+      "type": "prato",
+      "image_url": "https://images.unsplash.com/photo-1608219992759-8d74ed8d76eb?w=800",
+      "price_normal": 52.00,
+      "menu_id_ref": 0,
+      "category_id_ref": 1,
+      "subcategory_id_ref": 3,
+      "active": true,
+      "order": 6,
+      "prep_time_minutes": 14
+    },
+    {
+      "name": "Bucatini all'Amatriciana",
+      "description": "Massa tubular com guanciale crocante, tomate San Marzano e pecorino romano",
+      "type": "prato",
+      "image_url": "https://images.unsplash.com/photo-1612874742237-6526221588e3?w=800",
+      "price_normal": 68.00,
+      "menu_id_ref": 0,
+      "category_id_ref": 1,
+      "subcategory_id_ref": 3,
+      "active": true,
+      "order": 7,
+      "prep_time_minutes": 18
+    },
+    {
+      "name": "Risotto ai Funghi Porcini",
+      "description": "Risoto cremoso com funghi porcini importados e finalizado com trufa branca",
+      "type": "prato",
+      "image_url": "https://images.unsplash.com/photo-1476124369491-e7addf5db371?w=800",
+      "price_normal": 92.00,
+      "menu_id_ref": 0,
+      "category_id_ref": 1,
+      "subcategory_id_ref": 4,
+      "active": true,
+      "order": 8,
+      "prep_time_minutes": 28
+    },
+    {
+      "name": "Risotto al Nero di Seppia",
+      "description": "Risoto negro com tinta de lula, frutos do mar frescos e toque de limão",
+      "type": "prato",
+      "image_url": "https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?w=800",
+      "price_normal": 98.00,
+      "menu_id_ref": 0,
+      "category_id_ref": 1,
+      "subcategory_id_ref": 4,
+      "active": true,
+      "order": 9,
+      "prep_time_minutes": 30
+    },
+    {
+      "name": "Risotto alla Milanese",
+      "description": "Clássico risoto milanês com açafrão verdadeiro e tutano de boi",
+      "type": "prato",
+      "image_url": "https://images.unsplash.com/photo-1633964913295-ceb43826a07f?w=800",
+      "price_normal": 78.00,
+      "menu_id_ref": 0,
+      "category_id_ref": 1,
+      "subcategory_id_ref": 4,
+      "active": true,
+      "order": 10,
+      "prep_time_minutes": 25
+    },
+    {
+      "name": "Ossobuco alla Milanese",
+      "description": "Joelho de vitela braseado lentamente com gremolata, servido com risoto alla milanese",
+      "type": "prato",
+      "image_url": "https://images.unsplash.com/photo-1544025162-d76694265947?w=800",
+      "price_normal": 148.00,
+      "menu_id_ref": 0,
+      "category_id_ref": 2,
+      "subcategory_id_ref": 5,
+      "active": true,
+      "order": 1,
+      "prep_time_minutes": 35
+    },
+    {
+      "name": "Bistecca alla Fiorentina",
+      "description": "Corte T-bone de 800g grelhado na brasa, para 2 pessoas, com azeite e flor de sal",
+      "type": "prato",
+      "image_url": "https://images.unsplash.com/photo-1558030006-450675393462?w=800",
+      "price_normal": 298.00,
+      "menu_id_ref": 0,
+      "category_id_ref": 2,
+      "subcategory_id_ref": 5,
+      "active": true,
+      "order": 2,
+      "prep_time_minutes": 40
+    },
+    {
+      "name": "Filetto di Manzo al Barolo",
+      "description": "Filé mignon grelhado ao ponto com redução de vinho Barolo e funghi",
+      "type": "prato",
+      "image_url": "https://images.unsplash.com/photo-1546833998-877b37c2e5c6?w=800",
+      "price_normal": 168.00,
+      "menu_id_ref": 0,
+      "category_id_ref": 2,
+      "subcategory_id_ref": 5,
+      "active": true,
+      "order": 3,
+      "prep_time_minutes": 30
+    },
+    {
+      "name": "Saltimbocca alla Romana",
+      "description": "Escalopes de vitela com presunto de Parma e sálvia em molho de vinho branco",
+      "type": "prato",
+      "image_url": "https://images.unsplash.com/photo-1432139555190-58524dae6a55?w=800",
+      "price_normal": 118.00,
+      "menu_id_ref": 0,
+      "category_id_ref": 2,
+      "subcategory_id_ref": 5,
+      "active": true,
+      "order": 4,
+      "prep_time_minutes": 22
+    },
+    {
+      "name": "Branzino al Forno",
+      "description": "Robalo inteiro assado no forno com ervas mediterrâneas, batatas e azeitonas",
+      "type": "prato",
+      "image_url": "https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?w=800",
+      "price_normal": 138.00,
+      "menu_id_ref": 0,
+      "category_id_ref": 2,
+      "subcategory_id_ref": 6,
+      "active": true,
+      "order": 5,
+      "prep_time_minutes": 35
+    },
+    {
+      "name": "Frutti di Mare",
+      "description": "Seleção de frutos do mar grelhados: camarões, lulas, polvo e vieiras com limão siciliano",
+      "type": "prato",
+      "image_url": "https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=800",
+      "price_normal": 168.00,
+      "menu_id_ref": 0,
+      "category_id_ref": 2,
+      "subcategory_id_ref": 6,
+      "active": true,
+      "order": 6,
+      "prep_time_minutes": 28
+    },
+    {
+      "name": "Polpo alla Griglia",
+      "description": "Polvo grelhado com batatas ao murro, aioli de alho negro e páprica defumada",
+      "type": "prato",
+      "image_url": "https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=800",
+      "price_normal": 128.00,
+      "menu_id_ref": 0,
+      "category_id_ref": 2,
+      "subcategory_id_ref": 6,
+      "active": true,
+      "order": 7,
+      "prep_time_minutes": 25
+    },
+    {
+      "name": "Verdure Grigliate",
+      "description": "Mix de legumes grelhados: abobrinha, berinjela, pimentões e aspargos com azeite trufado",
+      "type": "prato",
+      "image_url": "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=800",
+      "price_normal": 42.00,
+      "menu_id_ref": 0,
+      "category_id_ref": 3,
+      "active": true,
+      "order": 1,
+      "prep_time_minutes": 15
+    },
+    {
+      "name": "Insalata Caprese",
+      "description": "Tomate coração de boi, mozzarella di bufala, manjericão fresco e redução balsâmica",
+      "type": "prato",
+      "image_url": "https://images.unsplash.com/photo-1592417817098-8fd3d9eb14a5?w=800",
+      "price_normal": 48.00,
+      "menu_id_ref": 0,
+      "category_id_ref": 3,
+      "active": true,
+      "order": 2,
+      "prep_time_minutes": 8
+    },
+    {
+      "name": "Patate al Rosmarino",
+      "description": "Batatas rústicas assadas com alecrim fresco e alho confitado",
+      "type": "prato",
+      "image_url": "https://images.unsplash.com/photo-1518013431117-eb1465fa5752?w=800",
+      "price_normal": 32.00,
+      "menu_id_ref": 0,
+      "category_id_ref": 3,
+      "active": true,
+      "order": 3,
+      "prep_time_minutes": 20
+    },
+    {
+      "name": "Tiramisù",
+      "description": "Clássico italiano com biscoitos savoiardi, mascarpone, café espresso e cacau",
+      "type": "prato",
+      "image_url": "https://images.unsplash.com/photo-1571877227200-a0d98ea607e9?w=800",
+      "price_normal": 38.00,
+      "menu_id_ref": 0,
+      "category_id_ref": 4,
+      "active": true,
+      "order": 1,
+      "prep_time_minutes": 5
+    },
+    {
+      "name": "Panna Cotta",
+      "description": "Creme de baunilha com coulis de frutas vermelhas e redução de balsâmico",
+      "type": "prato",
+      "image_url": "https://images.unsplash.com/photo-1488477181946-6428a0291777?w=800",
+      "price_normal": 32.00,
+      "menu_id_ref": 0,
+      "category_id_ref": 4,
+      "active": true,
+      "order": 2,
+      "prep_time_minutes": 5
+    },
+    {
+      "name": "Cannoli Siciliani",
+      "description": "Canudos crocantes recheados com creme de ricota, chocolate e pistache",
+      "type": "prato",
+      "image_url": "https://images.unsplash.com/photo-1551024506-0bccd828d307?w=800",
+      "price_normal": 28.00,
+      "menu_id_ref": 0,
+      "category_id_ref": 4,
+      "active": true,
+      "order": 3,
+      "prep_time_minutes": 5
+    },
+    {
+      "name": "Affogato al Caffè",
+      "description": "Gelato de baunilha afogado em espresso quente com amaretto",
+      "type": "prato",
+      "image_url": "https://images.unsplash.com/photo-1579954115545-a95591f28bfc?w=800",
+      "price_normal": 26.00,
+      "menu_id_ref": 0,
+      "category_id_ref": 4,
+      "active": true,
+      "order": 4,
+      "prep_time_minutes": 3
+    },
+    {
+      "name": "Espresso",
+      "description": "Café espresso italiano com grãos torrados artesanalmente",
+      "type": "bebida",
+      "image_url": "https://images.unsplash.com/photo-1510591509098-f4fdc6d0ff04?w=800",
+      "price_normal": 8.00,
+      "menu_id_ref": 0,
+      "category_id_ref": 5,
+      "active": true,
+      "order": 1,
+      "prep_time_minutes": 3
+    },
+    {
+      "name": "Cappuccino",
+      "description": "Espresso com leite vaporizado e espuma cremosa",
+      "type": "bebida",
+      "image_url": "https://images.unsplash.com/photo-1572442388796-11668a67e53d?w=800",
+      "price_normal": 12.00,
+      "menu_id_ref": 0,
+      "category_id_ref": 5,
+      "active": true,
+      "order": 2,
+      "prep_time_minutes": 5
+    },
+    {
+      "name": "Acqua San Pellegrino",
+      "description": "Água mineral com gás italiana 750ml",
+      "type": "bebida",
+      "image_url": "https://images.unsplash.com/photo-1523362628745-0c100150b504?w=800",
+      "price_normal": 18.00,
+      "menu_id_ref": 0,
+      "category_id_ref": 5,
+      "active": true,
+      "order": 3,
+      "prep_time_minutes": 1
+    },
+    {
+      "name": "Limonata della Casa",
+      "description": "Limonada caseira com limão siciliano, hortelã e água com gás",
+      "type": "bebida",
+      "image_url": "https://images.unsplash.com/photo-1621263764928-df1444c5e859?w=800",
+      "price_normal": 16.00,
+      "menu_id_ref": 0,
+      "category_id_ref": 5,
+      "active": true,
+      "order": 4,
+      "prep_time_minutes": 5
+    },
+    {
+      "name": "Barolo DOCG 2018",
+      "description": "Vinho tinto encorpado da região do Piemonte. Notas de cereja, alcatrão e rosas. Ideal para carnes vermelhas.",
+      "type": "vinho",
+      "image_url": "https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?w=800",
+      "price_normal": 0,
+      "price_bottle": 580.00,
+      "price_glass": 85.00,
+      "menu_id_ref": 4,
+      "category_id_ref": 6,
+      "subcategory_id_ref": 7,
+      "active": true,
+      "order": 1,
+      "prep_time_minutes": 5,
+      "vintage": "2018",
+      "country": "Itália",
+      "region": "Piemonte",
+      "winery": "Marchesi di Barolo",
+      "wine_type": "Tinto",
+      "volume": 750,
+      "alcohol_content": 14.0
+    },
+    {
+      "name": "Barbaresco DOCG 2019",
+      "description": "Elegante tinto piemontês com taninos sedosos. Aromas de violeta, frutas vermelhas e especiarias.",
+      "type": "vinho",
+      "image_url": "https://images.unsplash.com/photo-1474722883778-792e7990302f?w=800",
+      "price_normal": 0,
+      "price_bottle": 420.00,
+      "price_glass": 65.00,
+      "menu_id_ref": 4,
+      "category_id_ref": 6,
+      "subcategory_id_ref": 7,
+      "active": true,
+      "order": 2,
+      "prep_time_minutes": 5,
+      "vintage": "2019",
+      "country": "Itália",
+      "region": "Piemonte",
+      "winery": "Gaja",
+      "wine_type": "Tinto",
+      "volume": 750,
+      "alcohol_content": 13.5
+    },
+    {
+      "name": "Brunello di Montalcino 2017",
+      "description": "Grande tinto toscano, 100% Sangiovese. Complexo com notas de ameixa, couro e tabaco.",
+      "type": "vinho",
+      "image_url": "https://images.unsplash.com/photo-1553361371-9b22f78e8b1d?w=800",
+      "price_normal": 0,
+      "price_bottle": 650.00,
+      "price_glass": 95.00,
+      "menu_id_ref": 4,
+      "category_id_ref": 6,
+      "subcategory_id_ref": 8,
+      "active": true,
+      "order": 3,
+      "prep_time_minutes": 5,
+      "vintage": "2017",
+      "country": "Itália",
+      "region": "Toscana",
+      "winery": "Biondi-Santi",
+      "wine_type": "Tinto",
+      "volume": 750,
+      "alcohol_content": 14.5
+    },
+    {
+      "name": "Chianti Classico Riserva 2019",
+      "description": "Autêntico Chianti com estrutura elegante. Cereja, ervas e leve tostado.",
+      "type": "vinho",
+      "image_url": "https://images.unsplash.com/photo-1558001373-7b93ee48ffa0?w=800",
+      "price_normal": 0,
+      "price_bottle": 280.00,
+      "price_glass": 45.00,
+      "menu_id_ref": 4,
+      "category_id_ref": 6,
+      "subcategory_id_ref": 8,
+      "active": true,
+      "order": 4,
+      "prep_time_minutes": 5,
+      "vintage": "2019",
+      "country": "Itália",
+      "region": "Toscana",
+      "winery": "Antinori",
+      "wine_type": "Tinto",
+      "volume": 750,
+      "alcohol_content": 13.5
+    },
+    {
+      "name": "Amarone della Valpolicella 2016",
+      "description": "Potente vinho do Vêneto feito com uvas appassite. Frutas escuras, chocolate e especiarias.",
+      "type": "vinho",
+      "image_url": "https://images.unsplash.com/photo-1506377247377-2a5b3b417ebb?w=800",
+      "price_normal": 0,
+      "price_bottle": 520.00,
+      "price_glass": 78.00,
+      "menu_id_ref": 4,
+      "category_id_ref": 6,
+      "subcategory_id_ref": 9,
+      "active": true,
+      "order": 5,
+      "prep_time_minutes": 5,
+      "vintage": "2016",
+      "country": "Itália",
+      "region": "Vêneto",
+      "winery": "Bertani",
+      "wine_type": "Tinto",
+      "volume": 750,
+      "alcohol_content": 15.5
+    },
+    {
+      "name": "Gavi di Gavi 2022",
+      "description": "Branco refrescante do Piemonte. Notas de pêra, amêndoa e flores brancas.",
+      "type": "vinho",
+      "image_url": "https://images.unsplash.com/photo-1566995541428-f2246c17cda1?w=800",
+      "price_normal": 0,
+      "price_bottle": 180.00,
+      "price_glass": 32.00,
+      "menu_id_ref": 4,
+      "category_id_ref": 7,
+      "active": true,
+      "order": 1,
+      "prep_time_minutes": 5,
+      "vintage": "2022",
+      "country": "Itália",
+      "region": "Piemonte",
+      "winery": "La Scolca",
+      "wine_type": "Branco",
+      "volume": 750,
+      "alcohol_content": 12.0
+    },
+    {
+      "name": "Vermentino di Sardegna 2022",
+      "description": "Branco mediterrâneo com mineralidade. Cítricos, ervas e salinidade.",
+      "type": "vinho",
+      "image_url": "https://images.unsplash.com/photo-1584916201218-f4242ceb4809?w=800",
+      "price_normal": 0,
+      "price_bottle": 160.00,
+      "price_glass": 28.00,
+      "menu_id_ref": 4,
+      "category_id_ref": 7,
+      "active": true,
+      "order": 2,
+      "prep_time_minutes": 5,
+      "vintage": "2022",
+      "country": "Itália",
+      "region": "Sardenha",
+      "winery": "Sella & Mosca",
+      "wine_type": "Branco",
+      "volume": 750,
+      "alcohol_content": 12.5
+    },
+    {
+      "name": "Prosecco Superiore DOCG",
+      "description": "Espumante elegante de Valdobbiadene. Perlage fino, maçã verde e flores.",
+      "type": "vinho",
+      "image_url": "https://images.unsplash.com/photo-1549918864-48ac978761a4?w=800",
+      "price_normal": 0,
+      "price_bottle": 180.00,
+      "price_glass": 32.00,
+      "menu_id_ref": 4,
+      "category_id_ref": 8,
+      "active": true,
+      "order": 1,
+      "prep_time_minutes": 3,
+      "vintage": "NV",
+      "country": "Itália",
+      "region": "Vêneto",
+      "winery": "Bisol",
+      "wine_type": "Espumante",
+      "volume": 750,
+      "alcohol_content": 11.5
+    },
+    {
+      "name": "Franciacorta Brut DOCG",
+      "description": "O 'Champagne italiano'. Método tradicional com elegância e complexidade.",
+      "type": "vinho",
+      "image_url": "https://images.unsplash.com/photo-1551538827-9c037cb4f32a?w=800",
+      "price_normal": 0,
+      "price_bottle": 320.00,
+      "price_glass": 52.00,
+      "menu_id_ref": 4,
+      "category_id_ref": 8,
+      "active": true,
+      "order": 2,
+      "prep_time_minutes": 3,
+      "vintage": "NV",
+      "country": "Itália",
+      "region": "Lombardia",
+      "winery": "Ca' del Bosco",
+      "wine_type": "Espumante",
+      "volume": 750,
+      "alcohol_content": 12.5
+    }
+  ],
+
+  "tags": [
+    {
+      "name": "Vegetariano",
+      "color": "#4CAF50",
+      "description": "Pratos sem carne",
+      "entity_type": "product",
+      "active": true
+    },
+    {
+      "name": "Vegano",
+      "color": "#8BC34A",
+      "description": "Pratos sem ingredientes de origem animal",
+      "entity_type": "product",
+      "active": true
+    },
+    {
+      "name": "Sem Glúten",
+      "color": "#FF9800",
+      "description": "Apropriado para celíacos",
+      "entity_type": "product",
+      "active": true
+    },
+    {
+      "name": "Especialidade da Casa",
+      "color": "#E91E63",
+      "description": "Receita exclusiva do chef",
+      "entity_type": "product",
+      "active": true
+    },
+    {
+      "name": "Premium",
+      "color": "#FFD700",
+      "description": "Ingredientes premium selecionados",
+      "entity_type": "product",
+      "active": true
+    },
+    {
+      "name": "Picante",
+      "color": "#F44336",
+      "description": "Contém pimenta",
+      "entity_type": "product",
+      "active": true
+    },
+    {
+      "name": "Harmonização",
+      "color": "#9C27B0",
+      "description": "Ideal para harmonização com vinhos",
+      "entity_type": "product",
+      "active": true
+    },
+    {
+      "name": "Porção para 2",
+      "color": "#2196F3",
+      "description": "Porção generosa para compartilhar",
+      "entity_type": "product",
+      "active": true
+    }
+  ],
+
+  "product_tags": [
+    {"product_id_ref": 0, "tag_id_ref": 0},
+    {"product_id_ref": 2, "tag_id_ref": 3},
+    {"product_id_ref": 7, "tag_id_ref": 3},
+    {"product_id_ref": 7, "tag_id_ref": 4},
+    {"product_id_ref": 8, "tag_id_ref": 0},
+    {"product_id_ref": 11, "tag_id_ref": 5},
+    {"product_id_ref": 13, "tag_id_ref": 0},
+    {"product_id_ref": 14, "tag_id_ref": 2},
+    {"product_id_ref": 16, "tag_id_ref": 3},
+    {"product_id_ref": 16, "tag_id_ref": 6},
+    {"product_id_ref": 17, "tag_id_ref": 4},
+    {"product_id_ref": 17, "tag_id_ref": 7},
+    {"product_id_ref": 21, "tag_id_ref": 2},
+    {"product_id_ref": 23, "tag_id_ref": 0},
+    {"product_id_ref": 24, "tag_id_ref": 0},
+    {"product_id_ref": 27, "tag_id_ref": 3}
+  ],
+
+  "users": [
+    {
+      "name": "Luan",
+      "email": "luan@lep.com",
+      "password": "senha123",
+      "role": "owner",
+      "permissions": ["master_admin"],
+      "active": true
+    },
+    {
+      "name": "Eduardo",
+      "email": "eduardo@lep.com",
+      "password": "senha123",
+      "role": "owner",
+      "permissions": ["master_admin"],
+      "active": true
+    },
+    {
+      "name": "Marco Rossi",
+      "email": "marco@fattoria.com.br",
+      "password": "senha123",
+      "role": "admin",
+      "permissions": ["manage_projects", "manage_products", "manage_menus", "manage_orders", "manage_customers", "manage_tables", "manage_reservations", "manage_waitlists", "view_reports", "export_data", "manage_settings", "manage_notifications", "manage_tags", "manage_categories"],
+      "active": true
+    },
+    {
+      "name": "Giulia Bianchi",
+      "email": "giulia@fattoria.com.br",
+      "password": "senha123",
+      "role": "manager",
+      "permissions": ["manage_reservations", "manage_orders", "view_reports", "manage_staff"],
+      "active": true
+    },
+    {
+      "name": "Alessandro Conti",
+      "email": "alessandro@fattoria.com.br",
+      "password": "senha123",
+      "role": "waiter",
+      "permissions": ["create_orders", "view_tables", "manage_reservations"],
+      "active": true
+    },
+    {
+      "name": "Sofia Romano",
+      "email": "sofia@fattoria.com.br",
+      "password": "senha123",
+      "role": "waiter",
+      "permissions": ["create_orders", "view_tables", "manage_reservations"],
+      "active": true
+    },
+    {
+      "name": "Luca Marino",
+      "email": "luca@fattoria.com.br",
+      "password": "senha123",
+      "role": "kitchen",
+      "permissions": ["view_orders", "update_order_status"],
+      "active": true
+    },
+    {
+      "name": "Chiara Greco",
+      "email": "chiara@fattoria.com.br",
+      "password": "senha123",
+      "role": "sommelier",
+      "permissions": ["manage_wine_list", "view_orders", "create_orders"],
+      "active": true
+    }
+  ],
+
+  "customers": [
+    {
+      "name": "Ricardo Almeida",
+      "email": "ricardo.almeida@email.com",
+      "phone": "+55 11 99876-5432",
+      "birth_date": "1985-03-15",
+      "notes": "Cliente VIP. Prefere mesa na janela. Alergia a frutos do mar.",
+      "active": true
+    },
+    {
+      "name": "Fernanda Costa",
+      "email": "fernanda.costa@email.com",
+      "phone": "+55 11 98765-4321",
+      "birth_date": "1990-07-22",
+      "notes": "Aniversário em julho. Adora vinhos do Piemonte.",
+      "active": true
+    },
+    {
+      "name": "Carlos Eduardo Santos",
+      "email": "carlos.santos@empresa.com",
+      "phone": "+55 11 97654-3210",
+      "birth_date": "1978-11-08",
+      "notes": "Frequente para almoços de negócios. Prefere sala privativa.",
+      "active": true
+    },
+    {
+      "name": "Ana Paula Ferreira",
+      "email": "ana.ferreira@email.com",
+      "phone": "+55 11 96543-2109",
+      "birth_date": "1992-02-28",
+      "notes": "Vegetariana. Cliente desde 2022.",
+      "active": true
+    },
+    {
+      "name": "Roberto Oliveira",
+      "email": "roberto.oliveira@email.com",
+      "phone": "+55 11 95432-1098",
+      "birth_date": "1970-09-14",
+      "notes": "Colecionador de vinhos. Interesse em rótulos raros.",
+      "active": true
+    },
+    {
+      "name": "Mariana Lima",
+      "email": "mariana.lima@email.com",
+      "phone": "+55 11 94321-0987",
+      "birth_date": "1988-12-03",
+      "notes": "Food blogger. Gosta de experimentar novidades do menu.",
+      "active": true
+    },
+    {
+      "name": "Paulo Mendes",
+      "email": "paulo.mendes@empresa.com",
+      "phone": "+55 11 93210-9876",
+      "birth_date": "1982-05-20",
+      "notes": "CEO da TechCorp. Eventos corporativos frequentes.",
+      "active": true
+    },
+    {
+      "name": "Juliana Ribeiro",
+      "email": "juliana.ribeiro@email.com",
+      "phone": "+55 11 92109-8765",
+      "birth_date": "1995-08-11",
+      "notes": "Intolerante à lactose. Sempre confirmar ingredientes.",
+      "active": true
+    }
+  ],
+
+  "reservations": [
+    {
+      "customer_id_ref": 0,
+      "table_id_ref": 0,
+      "datetime": "2025-01-20T19:30:00Z",
+      "party_size": 2,
+      "notes": "Aniversário de casamento. Preparar mesa especial com velas.",
+      "status": "confirmed",
+      "confirmation_key": "FAT-20250120-001"
+    },
+    {
+      "customer_id_ref": 2,
+      "table_id_ref": 14,
+      "datetime": "2025-01-21T12:00:00Z",
+      "party_size": 8,
+      "notes": "Reunião de diretoria. Menu executivo pré-definido.",
+      "status": "confirmed",
+      "confirmation_key": "FAT-20250121-001"
+    },
+    {
+      "customer_id_ref": 1,
+      "table_id_ref": 18,
+      "datetime": "2025-01-22T20:00:00Z",
+      "party_size": 4,
+      "notes": "Degustação de vinhos com sommelier.",
+      "status": "confirmed",
+      "confirmation_key": "FAT-20250122-001"
+    },
+    {
+      "customer_id_ref": 5,
+      "table_id_ref": 3,
+      "datetime": "2025-01-23T19:00:00Z",
+      "party_size": 2,
+      "notes": "Food blogger - pode tirar fotos dos pratos.",
+      "status": "confirmed",
+      "confirmation_key": "FAT-20250123-001"
+    },
+    {
+      "customer_id_ref": 6,
+      "table_id_ref": 14,
+      "datetime": "2025-01-25T12:30:00Z",
+      "party_size": 15,
+      "notes": "Evento corporativo TechCorp. Menu degustação completo.",
+      "status": "confirmed",
+      "confirmation_key": "FAT-20250125-001"
+    },
+    {
+      "customer_id_ref": 3,
+      "table_id_ref": 10,
+      "datetime": "2025-01-26T13:00:00Z",
+      "party_size": 2,
+      "notes": "Menu vegetariano. Mesa no terraço se tempo permitir.",
+      "status": "confirmed",
+      "confirmation_key": "FAT-20250126-001"
+    }
+  ],
+
+  "settings": {
+    "reservation_min_advance_hours": 2,
+    "reservation_max_advance_days": 60,
+    "notify_reservation_create": true,
+    "notify_reservation_update": true,
+    "notify_reservation_cancel": true,
+    "notify_table_available": true,
+    "notify_confirmation_24h": true,
+    "default_notification_channel": "whatsapp",
+    "enable_sms": true,
+    "enable_email": true,
+    "enable_whatsapp": true,
+    "timezone": "America/Sao_Paulo",
+    "confirmation_hours_before": 24,
+    "reminder_hours_before": 2,
+    "auto_cancel_no_response_hours": 0,
+    "response_processing_mode": "ai_assisted"
+  },
+
+  "notification_templates": [
+    {
+      "name": "Confirmação de Reserva",
+      "channel": "whatsapp",
+      "subject": "",
+      "body": "Olá {customer_name}! 🍝\n\nSua reserva no Fattoria está confirmada:\n📅 Data: {date}\n⏰ Horário: {time}\n👥 Pessoas: {party_size}\n🪑 Mesa: {table_number}\n\nPara cancelar ou alterar, responda esta mensagem.\n\nArrivederci! 🇮🇹",
+      "active": true
+    },
+    {
+      "name": "Lembrete 24h",
+      "channel": "whatsapp",
+      "subject": "",
+      "body": "Ciao {customer_name}! 👋\n\nLembramos que amanhã você tem reserva no Fattoria:\n📅 {date} às {time}\n👥 {party_size} pessoas\n\nPodemos confirmar sua presença?\nResponda SIM para confirmar ou NÃO para cancelar.\n\nA presto! 🍷",
+      "active": true
+    },
+    {
+      "name": "Confirmação por Email",
+      "channel": "email",
+      "subject": "Reserva Confirmada - Fattoria",
+      "body": "Prezado(a) {customer_name},\n\nÉ com prazer que confirmamos sua reserva:\n\nData: {date}\nHorário: {time}\nNúmero de pessoas: {party_size}\nMesa: {table_number}\n\nCaso precise cancelar ou alterar, entre em contato pelo telefone (11) 3456-7890 ou responda este email.\n\nEsperamos você!\n\nAtenciosamente,\nEquipe Fattoria",
+      "active": true
+    },
+    {
+      "name": "Cancelamento",
+      "channel": "whatsapp",
+      "subject": "",
+      "body": "Olá {customer_name},\n\nSua reserva para {date} às {time} foi cancelada conforme solicitado.\n\nEsperamos vê-lo em breve! 🍝\n\nFattoria",
+      "active": true
+    }
+  ],
+
+  "theme_customization": {
+    "primary_color": "#8B0000",
+    "secondary_color": "#DAA520",
+    "background_color": "#FFF8F0",
+    "card_background_color": "#FFFFFF",
+    "text_color": "#2C1810",
+    "text_secondary_color": "#6B5B4F",
+    "accent_color": "#C41E3A",
+    "success_color": "#228B22",
+    "error_color": "#DC143C",
+    "warning_color": "#FF8C00",
+    "info_color": "#4169E1",
+    "disabled_opacity": 0.5,
+    "shadow_intensity": 1.0,
+    "is_active": true
+  },
+
+  "leads": [
+    {
+      "name": "Marina Souza",
+      "email": "marina.souza@email.com",
+      "phone": "+55 11 99999-1111",
+      "message": "Gostaria de fazer um evento de aniversário para 30 pessoas",
+      "source": "website",
+      "status": "new",
+      "active": true
+    },
+    {
+      "name": "André Campos",
+      "email": "andre.campos@empresa.com",
+      "phone": "+55 11 99999-2222",
+      "message": "Interesse em parceria para eventos corporativos mensais",
+      "source": "referral",
+      "status": "contacted",
+      "active": true
+    }
+  ],
+
+  "staff_sales_records_csv": [
+    {
+      "file_name": "Relatorio de Vendas em Grid.csv",
+      "file_path_rel": "../../Relatorio de Vendas em Grid.csv"
+    }
+  ]
+}

@@ -192,7 +192,7 @@ type SeedError struct {
 func (s *SeedServiceV2) Execute(ctx context.Context) error {
 	// PASSO 1: Criar/Obter Organização e Fazer Login
 	fmt.Println("========== Passo 1: Criando Organização ==========")
-	orgID, projID, email, err := s.createOrganization()
+	orgID, projID, _, err := s.createOrganization()
 	if err != nil {
 		s.logger.Error(fmt.Sprintf("Erro ao criar organização: %v", err))
 		s.state.failed++
@@ -207,22 +207,57 @@ func (s *SeedServiceV2) Execute(ctx context.Context) error {
 	s.logger.Info(fmt.Sprintf("Organização OK (ID: %s)", orgID))
 	s.state.created++
 
-	// PASSO 2: Fazer Login
-	fmt.Println("\n========== Passo 2: Fazendo Login ==========")
-	err = s.login(email)
+	// PASSO 2: Fazer Login com Master Admin (pablo@lep.com)
+	// IMPORTANTE: Sempre usar master_admin para executar seed, pois tem acesso total
+	fmt.Println("\n========== Passo 2: Fazendo Login com Master Admin ==========")
+
+	// Sempre logar com master_admin (fallback_email) para ter permissões totais
+	masterAdminEmail := s.config.Auth.FallbackEmail
+	masterAdminPassword := s.config.Auth.FallbackPassword
+
+	s.logger.Info(fmt.Sprintf("Usando master_admin: %s", masterAdminEmail))
+
+	// NOVO: Tentar login com /admin/login primeiro (novo sistema)
+	_, err = s.client.AdminLogin(masterAdminEmail, masterAdminPassword)
 	if err != nil {
-		s.logger.Error(fmt.Sprintf("Erro ao fazer login: %v", err))
-		s.state.failed++
-		s.state.errors = append(s.state.errors, SeedError{
-			Type:    "auth",
-			Item:    email,
-			Message: err.Error(),
-		})
-		return err
+		s.logger.Info(fmt.Sprintf("Admin login falhou, tentando login legado: %v", err))
+		// Fallback: Login com sistema legado buscando a organização específica
+		orgID, projID, err = s.client.LoginAndGetIDsForOrg(masterAdminEmail, masterAdminPassword, s.config.Auth.OrganizationName)
+		if err != nil {
+			s.logger.Error(fmt.Sprintf("Erro ao fazer login com master_admin: %v", err))
+			s.state.failed++
+			s.state.errors = append(s.state.errors, SeedError{
+				Type:    "auth",
+				Item:    masterAdminEmail,
+				Message: err.Error(),
+			})
+			return err
+		}
+		s.logger.Info(fmt.Sprintf("Autenticado via legado como %s", masterAdminEmail))
+		s.client.SetHeaders(s.client.token, orgID, projID)
+	} else {
+		s.logger.Info(fmt.Sprintf("Autenticado via /admin/login como %s (admin)", masterAdminEmail))
+		// Admin tem acesso a todas as orgs/projetos, mas precisamos do orgID/projID para headers
+		// Buscar via login legado para obter os IDs
+		orgID, projID, err = s.client.LoginAndGetIDsForOrg(masterAdminEmail, masterAdminPassword, s.config.Auth.OrganizationName)
+		if err != nil {
+			s.logger.Info(fmt.Sprintf("Não foi possível obter IDs via legado, continuando sem headers: %v", err))
+		} else {
+			s.client.SetHeaders(s.client.token, orgID, projID)
+		}
 	}
 
-	s.logger.Info(fmt.Sprintf("Autenticado como %s", email))
-	s.client.SetHeaders(s.client.token, orgID, projID)
+	// PASSO 2.5: Garantir Assinatura Enterprise
+	fmt.Println("\n========== Passo 2.5: Garantindo Plano Enterprise ==========")
+	err = s.client.EnsureEnterpriseSubscription()
+	if err != nil {
+		// Não é erro fatal - pode ser que o endpoint não exista ou usuário não tenha permissão
+		s.logger.Info(fmt.Sprintf("Aviso: Não foi possível garantir assinatura Enterprise: %v", err))
+		s.logger.Info("Continuando execução - usuário pode ser master_admin ou endpoint não implementado")
+	} else {
+		s.logger.Info("Plano Enterprise verificado/ativado com sucesso")
+		s.state.created++
+	}
 
 	// PASSO 3: Criar Menus
 	fmt.Println("\n========== Passo 3: Criando Menus ==========")
@@ -240,6 +275,16 @@ func (s *SeedServiceV2) Execute(ctx context.Context) error {
 		// Criar novo menu
 		id, err := s.client.CreateMenu(menu.Name, menu.Order)
 		if err != nil {
+			// Se já existe, tentar buscar o ID existente
+			if err.Error() == "already_exists" {
+				existingID, getErr := s.client.GetMenuByName(menu.Name)
+				if getErr == nil && existingID != uuid.Nil {
+					menuIDs[idx] = existingID.String()
+					s.logger.Info(fmt.Sprintf("Menu %s já existe (recuperado)", menu.Name))
+					s.state.skipped++
+					continue
+				}
+			}
 			s.logger.Error(fmt.Sprintf("Erro ao criar menu %s: %v", menu.Name, err))
 			s.state.failed++
 			s.state.errors = append(s.state.errors, SeedError{
@@ -277,6 +322,16 @@ func (s *SeedServiceV2) Execute(ctx context.Context) error {
 		// Se não existe, criar nova
 		id, err := s.client.CreateCategory(menuID, cat.Name, cat.Order)
 		if err != nil {
+			// Se já existe, tentar buscar o ID existente
+			if err.Error() == "already_exists" {
+				existingID, getErr := s.client.GetCategoryByName(cat.Name)
+				if getErr == nil && existingID != uuid.Nil {
+					categoryIDs[idx] = existingID.String()
+					s.logger.Info(fmt.Sprintf("Categoria %s já existe (recuperado)", cat.Name))
+					s.state.skipped++
+					continue
+				}
+			}
 			s.logger.Error(fmt.Sprintf("Erro ao criar categoria %s: %v", cat.Name, err))
 			s.state.failed++
 			s.state.errors = append(s.state.errors, SeedError{
@@ -318,6 +373,18 @@ func (s *SeedServiceV2) Execute(ctx context.Context) error {
 
 		id, err := s.client.CreateSubcategory(catID, subcat.Name)
 		if err != nil {
+			// Se já existe, tentar buscar o ID existente
+			if err.Error() == "already_exists" {
+				existingID, getErr := s.client.GetSubcategoryByName(subcat.Name)
+				if getErr == nil && existingID != uuid.Nil {
+					subcategoryIDs[idx] = existingID.String()
+					s.logger.Info(fmt.Sprintf("Subcategoria %s já existe (recuperado)", subcat.Name))
+					s.state.skipped++
+					// Vincular à categoria
+					s.client.AddCategoryToSubcategory(existingID.String(), catID)
+					continue
+				}
+			}
 			s.logger.Error(fmt.Sprintf("Erro ao criar subcategoria %s: %v", subcat.Name, err))
 			s.state.failed++
 			s.state.errors = append(s.state.errors, SeedError{
@@ -356,6 +423,16 @@ func (s *SeedServiceV2) Execute(ctx context.Context) error {
 
 		id, err := s.client.CreateEnvironment(env.Name, env.Capacity)
 		if err != nil {
+			// Se já existe, tentar buscar o ID existente
+			if err.Error() == "already_exists" {
+				existingID, getErr := s.client.GetEnvironmentByName(env.Name)
+				if getErr == nil && existingID != uuid.Nil {
+					envIDs[idx] = existingID.String()
+					s.logger.Info(fmt.Sprintf("Ambiente %s já existe (recuperado)", env.Name))
+					s.state.skipped++
+					continue
+				}
+			}
 			s.logger.Error(fmt.Sprintf("Erro ao criar ambiente %s: %v", env.Name, err))
 			s.state.failed++
 			s.state.errors = append(s.state.errors, SeedError{
@@ -392,6 +469,16 @@ func (s *SeedServiceV2) Execute(ctx context.Context) error {
 
 		id, err := s.client.CreateTable(tbl.Number, tbl.Capacity, envID, "livre")
 		if err != nil {
+			// Se já existe, tentar buscar o ID existente
+			if err.Error() == "already_exists" {
+				existingID, getErr := s.client.GetTableByNumber(tbl.Number)
+				if getErr == nil && existingID != uuid.Nil {
+					tableIDs[idx] = existingID.String()
+					s.logger.Info(fmt.Sprintf("Mesa %d já existe (recuperado)", tbl.Number))
+					s.state.skipped++
+					continue
+				}
+			}
 			s.logger.Error(fmt.Sprintf("Erro ao criar mesa %d: %v", tbl.Number, err))
 			s.state.failed++
 			s.state.errors = append(s.state.errors, SeedError{
@@ -465,9 +552,20 @@ func (s *SeedServiceV2) Execute(ctx context.Context) error {
 			catID,
 			subcatID,
 			wineData,
+			prod.ImageURL,
 		)
 
 		if err != nil {
+			// Se já existe, tentar buscar o ID existente
+			if err.Error() == "already_exists" {
+				existingID, getErr := s.client.GetProductByName(prod.Name)
+				if getErr == nil && existingID != uuid.Nil {
+					productIDs[idx] = existingID.String()
+					s.logger.Info(fmt.Sprintf("Produto %s já existe (recuperado)", prod.Name))
+					s.state.skipped++
+					continue
+				}
+			}
 			s.logger.Error(fmt.Sprintf("Erro ao criar produto %s: %v", prod.Name, err))
 			s.state.failed++
 			s.state.errors = append(s.state.errors, SeedError{
@@ -486,37 +584,136 @@ func (s *SeedServiceV2) Execute(ctx context.Context) error {
 		}
 	}
 
-	// PASSO 9: Criar Usuários
-	fmt.Println("\n========== Passo 9: Criando Usuários ==========")
-	userIDs := make(map[int]string) // idx -> UUID
-	for idx, user := range s.seedData.Users {
-		// Verificar se usuário já existe
-		existingID, err := s.client.GetUserByEmail(user.Email)
-		if err == nil && existingID != uuid.Nil {
-			userIDs[idx] = existingID.String()
-			s.logger.Info(fmt.Sprintf("Usuário %s já existe", user.Email))
-			s.state.skipped++
-			continue
-		}
+	// PASSO 9: Criar Admins (NOVO SISTEMA)
+	fmt.Println("\n========== Passo 9: Criando Admins ==========")
+	adminIDs := make(map[int]string) // idx -> UUID
+	if len(s.seedData.Admins) > 0 {
+		for idx, admin := range s.seedData.Admins {
+			// Verificar se admin já existe
+			existingID, err := s.client.GetAdminByEmail(admin.Email)
+			if err == nil && existingID != uuid.Nil {
+				adminIDs[idx] = existingID.String()
+				s.logger.Info(fmt.Sprintf("Admin %s já existe", admin.Email))
+				s.state.skipped++
+				continue
+			}
 
-		id, err := s.client.CreateUser(user.Name, user.Email, user.Password, user.Role, user.Permissions)
-		if err != nil {
-			s.logger.Error(fmt.Sprintf("Erro ao criar usuário %s: %v", user.Email, err))
-			s.state.failed++
-			s.state.errors = append(s.state.errors, SeedError{
-				Type:    "user",
-				Item:    user.Email,
-				Message: err.Error(),
-			})
-		} else {
-			userIDs[idx] = id.String()
-			s.logger.Info(fmt.Sprintf("Usuário criado: %s (%s)", user.Email, user.Role))
-			s.state.created++
+			id, err := s.client.CreateAdmin(admin.Name, admin.Email, admin.Password, admin.Permissions)
+			if err != nil {
+				if err.Error() == "already_exists" {
+					existingID, getErr := s.client.GetAdminByEmail(admin.Email)
+					if getErr == nil && existingID != uuid.Nil {
+						adminIDs[idx] = existingID.String()
+						s.logger.Info(fmt.Sprintf("Admin %s já existe (recuperado)", admin.Email))
+						s.state.skipped++
+						continue
+					}
+				}
+				s.logger.Error(fmt.Sprintf("Erro ao criar admin %s: %v", admin.Email, err))
+				s.state.failed++
+				s.state.errors = append(s.state.errors, SeedError{
+					Type:    "admin",
+					Item:    admin.Email,
+					Message: err.Error(),
+				})
+			} else {
+				adminIDs[idx] = id.String()
+				s.logger.Info(fmt.Sprintf("Admin criado: %s", admin.Email))
+				s.state.created++
+			}
 		}
+	} else {
+		s.logger.Info("Nenhum Admin definido no seed")
 	}
 
-	// PASSO 10: Criar Clientes
-	fmt.Println("\n========== Passo 10: Criando Clientes ==========")
+	// PASSO 9.5: Criar Clients (NOVO SISTEMA)
+	fmt.Println("\n========== Passo 9.5: Criando Clients ==========")
+	clientIDs := make(map[int]string) // idx -> UUID
+	if len(s.seedData.Clients) > 0 {
+		for idx, client := range s.seedData.Clients {
+			// Verificar se client já existe
+			existingID, err := s.client.GetClientUserByEmail(client.Email)
+			if err == nil && existingID != uuid.Nil {
+				clientIDs[idx] = existingID.String()
+				s.logger.Info(fmt.Sprintf("Client %s já existe", client.Email))
+				s.state.skipped++
+				continue
+			}
+
+			// Criar client com orgID e projID do contexto atual
+			id, err := s.client.CreateClientUser(client.Name, client.Email, client.Password, orgID, []string{projID}, client.Permissions)
+			if err != nil {
+				if err.Error() == "already_exists" {
+					existingID, getErr := s.client.GetClientUserByEmail(client.Email)
+					if getErr == nil && existingID != uuid.Nil {
+						clientIDs[idx] = existingID.String()
+						s.logger.Info(fmt.Sprintf("Client %s já existe (recuperado)", client.Email))
+						s.state.skipped++
+						continue
+					}
+				}
+				s.logger.Error(fmt.Sprintf("Erro ao criar client %s: %v", client.Email, err))
+				s.state.failed++
+				s.state.errors = append(s.state.errors, SeedError{
+					Type:    "client",
+					Item:    client.Email,
+					Message: err.Error(),
+				})
+			} else {
+				clientIDs[idx] = id.String()
+				s.logger.Info(fmt.Sprintf("Client criado: %s (Org: %s)", client.Email, orgID))
+				s.state.created++
+			}
+		}
+	} else {
+		s.logger.Info("Nenhum Client definido no seed")
+	}
+
+	// PASSO 10: Criar Usuários (LEGACY - manter para compatibilidade)
+	fmt.Println("\n========== Passo 10: Criando Usuários (Legacy) ==========")
+	userIDs := make(map[int]string) // idx -> UUID
+	if len(s.seedData.Users) > 0 {
+		for idx, user := range s.seedData.Users {
+			// Verificar se usuário já existe
+			existingID, err := s.client.GetUserByEmail(user.Email)
+			if err == nil && existingID != uuid.Nil {
+				userIDs[idx] = existingID.String()
+				s.logger.Info(fmt.Sprintf("Usuário %s já existe", user.Email))
+				s.state.skipped++
+				continue
+			}
+
+			id, err := s.client.CreateUser(user.Name, user.Email, user.Password, user.Role, user.Permissions)
+			if err != nil {
+				// Se já existe, tentar buscar o ID existente
+				if err.Error() == "already_exists" {
+					existingID, getErr := s.client.GetUserByEmail(user.Email)
+					if getErr == nil && existingID != uuid.Nil {
+						userIDs[idx] = existingID.String()
+						s.logger.Info(fmt.Sprintf("Usuário %s já existe (recuperado)", user.Email))
+						s.state.skipped++
+						continue
+					}
+				}
+				s.logger.Error(fmt.Sprintf("Erro ao criar usuário %s: %v", user.Email, err))
+				s.state.failed++
+				s.state.errors = append(s.state.errors, SeedError{
+					Type:    "user",
+					Item:    user.Email,
+					Message: err.Error(),
+				})
+			} else {
+				userIDs[idx] = id.String()
+				s.logger.Info(fmt.Sprintf("Usuário criado: %s (%s)", user.Email, user.Role))
+				s.state.created++
+			}
+		}
+	} else {
+		s.logger.Info("Nenhum Usuário (legacy) definido no seed")
+	}
+
+	// PASSO 11: Criar Customers (clientes do restaurante)
+	fmt.Println("\n========== Passo 11: Criando Customers ==========")
 	customerIDs := make(map[int]string) // idx -> UUID
 	for idx, cust := range s.seedData.Customers {
 		// Verificar se cliente já existe
@@ -530,6 +727,16 @@ func (s *SeedServiceV2) Execute(ctx context.Context) error {
 
 		id, err := s.client.CreateCustomer(cust.Name, cust.Email, cust.Phone, cust.BirthDate, cust.Notes)
 		if err != nil {
+			// Se já existe, tentar buscar o ID existente
+			if err.Error() == "already_exists" {
+				existingID, getErr := s.client.GetCustomerByEmail(cust.Email)
+				if getErr == nil && existingID != uuid.Nil {
+					customerIDs[idx] = existingID.String()
+					s.logger.Info(fmt.Sprintf("Cliente %s já existe (recuperado)", cust.Email))
+					s.state.skipped++
+					continue
+				}
+			}
 			s.logger.Error(fmt.Sprintf("Erro ao criar cliente %s: %v", cust.Email, err))
 			s.state.failed++
 			s.state.errors = append(s.state.errors, SeedError{
@@ -544,8 +751,8 @@ func (s *SeedServiceV2) Execute(ctx context.Context) error {
 		}
 	}
 
-	// PASSO 11: Criar Tags
-	fmt.Println("\n========== Passo 11: Criando Tags ==========")
+	// PASSO 12: Criar Tags
+	fmt.Println("\n========== Passo 12: Criando Tags ==========")
 	tagIDs := make(map[int]string) // idx -> UUID
 	for idx, tag := range s.seedData.Tags {
 		// Verificar se tag já existe
@@ -559,6 +766,16 @@ func (s *SeedServiceV2) Execute(ctx context.Context) error {
 
 		id, err := s.client.CreateTag(tag.Name, tag.Color, tag.Description, tag.EntityType)
 		if err != nil {
+			// Se já existe, tentar buscar o ID existente
+			if err.Error() == "already_exists" {
+				existingID, getErr := s.client.GetTagByName(tag.Name)
+				if getErr == nil && existingID != uuid.Nil {
+					tagIDs[idx] = existingID.String()
+					s.logger.Info(fmt.Sprintf("Tag %s já existe (recuperado)", tag.Name))
+					s.state.skipped++
+					continue
+				}
+			}
 			s.logger.Error(fmt.Sprintf("Erro ao criar tag %s: %v", tag.Name, err))
 			s.state.failed++
 			s.state.errors = append(s.state.errors, SeedError{
@@ -573,8 +790,8 @@ func (s *SeedServiceV2) Execute(ctx context.Context) error {
 		}
 	}
 
-	// PASSO 12: Criar Reservas
-	fmt.Println("\n========== Passo 12: Criando Reservas ==========")
+	// PASSO 13: Criar Reservas
+	fmt.Println("\n========== Passo 13: Criando Reservas ==========")
 	for _, res := range s.seedData.Reservations {
 		// Obter IDs dos clientes e mesas
 		custID, ok := customerIDs[res.CustomerIDRef]
@@ -623,8 +840,8 @@ func (s *SeedServiceV2) Execute(ctx context.Context) error {
 		}
 	}
 
-	// PASSO 13: Criar Product Tags (relacionamento N:M)
-	fmt.Println("\n========== Passo 13: Criando Product Tags ==========")
+	// PASSO 14: Criar Product Tags (relacionamento N:M)
+	fmt.Println("\n========== Passo 14: Criando Product Tags ==========")
 	if len(s.seedData.ProductTags) > 0 {
 		for _, pt := range s.seedData.ProductTags {
 			prodID, ok := productIDs[pt.ProductIDRef]
@@ -654,8 +871,8 @@ func (s *SeedServiceV2) Execute(ctx context.Context) error {
 		s.logger.Info("Nenhum ProductTag definido no seed")
 	}
 
-	// PASSO 14: Criar Settings
-	fmt.Println("\n========== Passo 14: Criando Settings ==========")
+	// PASSO 15: Criar Settings
+	fmt.Println("\n========== Passo 15: Criando Settings ==========")
 	if s.seedData.Settings.Timezone != "" || s.seedData.Settings.ReservationMinAdvanceHours > 0 {
 		err := s.client.CreateSettings(&s.seedData.Settings)
 		if err != nil {
@@ -674,8 +891,8 @@ func (s *SeedServiceV2) Execute(ctx context.Context) error {
 		s.logger.Info("Nenhum Settings definido no seed")
 	}
 
-	// PASSO 15: Criar Notification Templates
-	fmt.Println("\n========== Passo 15: Criando Notification Templates ==========")
+	// PASSO 16: Criar Notification Templates
+	fmt.Println("\n========== Passo 16: Criando Notification Templates ==========")
 	if len(s.seedData.NotificationTemplates) > 0 {
 		for _, tmpl := range s.seedData.NotificationTemplates {
 			// Verificar se template já existe
@@ -704,8 +921,8 @@ func (s *SeedServiceV2) Execute(ctx context.Context) error {
 		s.logger.Info("Nenhum NotificationTemplate definido no seed")
 	}
 
-	// PASSO 16: Criar Theme Customization
-	fmt.Println("\n========== Passo 16: Criando Theme Customization ==========")
+	// PASSO 17: Criar Theme Customization
+	fmt.Println("\n========== Passo 17: Criando Theme Customization ==========")
 	if s.seedData.ThemeCustomization.PrimaryColor != "" {
 		err := s.client.CreateThemeCustomization(&s.seedData.ThemeCustomization)
 		if err != nil {
@@ -722,6 +939,59 @@ func (s *SeedServiceV2) Execute(ctx context.Context) error {
 		}
 	} else {
 		s.logger.Info("Nenhum ThemeCustomization definido no seed")
+	}
+
+	// PASSO 18: Importar Staff Sales Records (CSV)
+	fmt.Println("\n========== Passo 18: Importando Staff Sales Records ==========")
+	if len(s.seedData.StaffSalesRecordsCSV) > 0 {
+		for _, csvData := range s.seedData.StaffSalesRecordsCSV {
+			var csvContent []byte
+			var loadErr error
+
+			if csvData.FilePathRel != "" {
+				csvContent, loadErr = os.ReadFile(csvData.FilePathRel)
+				if loadErr != nil {
+					s.logger.Error(fmt.Sprintf("Erro ao ler CSV %s: %v", csvData.FilePathRel, loadErr))
+					s.state.failed++
+					s.state.errors = append(s.state.errors, SeedError{
+						Type:    "staff_sales_csv",
+						Item:    csvData.FileName,
+						Message: loadErr.Error(),
+					})
+					continue
+				}
+			} else if csvData.FileContent != "" {
+				csvContent = []byte(csvData.FileContent)
+			} else {
+				s.logger.Error(fmt.Sprintf("CSV %s sem conteúdo ou caminho", csvData.FileName))
+				s.state.failed++
+				continue
+			}
+
+			result, err := s.client.ImportStaffSalesCSV(csvData.FileName, csvContent)
+			if err != nil {
+				s.logger.Error(fmt.Sprintf("Erro ao importar CSV %s: %v", csvData.FileName, err))
+				s.state.failed++
+				s.state.errors = append(s.state.errors, SeedError{
+					Type:    "staff_sales_csv",
+					Item:    csvData.FileName,
+					Message: err.Error(),
+				})
+			} else {
+				if len(result.Errors) > 0 {
+					s.logger.Info(fmt.Sprintf("CSV importado com avisos: %s (%d registros, %d erros)",
+						csvData.FileName, result.RecordsCount, len(result.Errors)))
+					for _, e := range result.Errors {
+						s.logger.Debug(fmt.Sprintf("  - %s", e))
+					}
+				} else {
+					s.logger.Info(fmt.Sprintf("CSV importado: %s (%d registros)", csvData.FileName, result.RecordsCount))
+				}
+				s.state.created += result.RecordsCount
+			}
+		}
+	} else {
+		s.logger.Info("Nenhum Staff Sales CSV definido no seed")
 	}
 
 	return nil

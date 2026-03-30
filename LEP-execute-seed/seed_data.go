@@ -65,24 +65,26 @@ type ProductData struct {
 	Name             string  `json:"name"`
 	Description      string  `json:"description"`
 	Type             string  `json:"type"`
+	ImageURL         string  `json:"image_url,omitempty"`
 	PriceNormal      float64 `json:"price_normal"`
-	PricePromo       float64 `json:"price_promo"`
-	PriceGlass       float64 `json:"price_glass"`
-	PriceBottle      float64 `json:"price_bottle"`
-	PriceHalfBottle  float64 `json:"price_half_bottle"`
+	PricePromo       float64 `json:"price_promo,omitempty"`
+	PriceGlass       float64 `json:"price_glass,omitempty"`
+	PriceBottle      float64 `json:"price_bottle,omitempty"`
+	PriceHalfBottle  float64 `json:"price_half_bottle,omitempty"`
 	MenuIDRef        int     `json:"menu_id_ref"`
 	CategoryIDRef    int     `json:"category_id_ref"`
-	SubcategoryIDRef int     `json:"subcategory_id_ref"`
+	SubcategoryIDRef int     `json:"subcategory_id_ref,omitempty"`
 	Active           bool    `json:"active"`
 	Order            int     `json:"order"`
 	PrepTimeMinutes  int     `json:"prep_time_minutes"`
-	Vintage          string  `json:"vintage"`
-	Country          string  `json:"country"`
-	Region           string  `json:"region"`
-	Winery           string  `json:"winery"`
-	WineType         string  `json:"wine_type"`
-	Volume           int     `json:"volume"`
-	AlcoholContent   float64 `json:"alcohol_content"`
+	// Campos específicos para vinhos
+	Vintage          string  `json:"vintage,omitempty"`
+	Country          string  `json:"country,omitempty"`
+	Region           string  `json:"region,omitempty"`
+	Winery           string  `json:"winery,omitempty"`
+	WineType         string  `json:"wine_type,omitempty"`
+	Volume           int     `json:"volume,omitempty"`
+	AlcoholContent   float64 `json:"alcohol_content,omitempty"`
 }
 
 type SettingsData struct {
@@ -98,6 +100,13 @@ type SettingsData struct {
 	EnableEmail                bool   `json:"enable_email"`
 	EnableWhatsApp             bool   `json:"enable_whatsapp"`
 	Timezone                   string `json:"timezone"`
+	// ✨ Novos campos para sistema de notificações aprimorado
+	// Timing flexível de notificações
+	ConfirmationHoursBefore    int    `json:"confirmation_hours_before,omitempty"`     // Horas antes para pedir confirmação (padrão: 24)
+	ReminderHoursBefore        int    `json:"reminder_hours_before,omitempty"`         // Horas antes para lembrete (padrão: 2, 0=desativado)
+	AutoCancelNoResponseHours  int    `json:"auto_cancel_no_response_hours,omitempty"` // Horas sem resposta para cancelar (0=desativado)
+	// Modo de processamento de respostas
+	ResponseProcessingMode     string `json:"response_processing_mode,omitempty"`      // "automatic", "ai_assisted", "manual"
 }
 
 type NotificationTemplateData struct {
@@ -129,9 +138,29 @@ type UserData struct {
 	Name        string   `json:"name"`
 	Email       string   `json:"email"`
 	Password    string   `json:"password"`
-	Role        string   `json:"role"` // admin, manager, waiter, kitchen
+	Role        string   `json:"role"` // admin, manager, waiter, kitchen (LEGACY)
 	Permissions []string `json:"permissions,omitempty"`
 	Active      bool     `json:"active"`
+}
+
+// AdminData representa um usuário admin do sistema (tabela admins)
+type AdminData struct {
+	Name        string   `json:"name"`
+	Email       string   `json:"email"`
+	Password    string   `json:"password"`
+	Permissions []string `json:"permissions,omitempty"` // ex: ["master_admin"]
+	Active      bool     `json:"active"`
+}
+
+// ClientData representa um usuário cliente (tabela clients)
+// Pertence a UMA organização e pode ter acesso a múltiplos projetos
+type ClientData struct {
+	Name        string   `json:"name"`
+	Email       string   `json:"email"`
+	Password    string   `json:"password"`
+	Permissions []string `json:"permissions,omitempty"` // Permissões diretas
+	Active      bool     `json:"active"`
+	// OrgId e ProjIds são preenchidos automaticamente durante o seed
 }
 
 type CustomerData struct {
@@ -208,6 +237,13 @@ type LeadData struct {
 	Active    bool   `json:"active"`
 }
 
+// StaffSalesRecordCSVData representa um arquivo CSV para importação de vendas
+type StaffSalesRecordCSVData struct {
+	FileName    string `json:"file_name"`               // Nome do arquivo para referência
+	FilePathRel string `json:"file_path_rel,omitempty"` // Caminho relativo ao CSV (prioridade)
+	FileContent string `json:"file_content,omitempty"`  // Conteúdo CSV direto (alternativa)
+}
+
 type SeedData struct {
 	// Organization & Projects
 	Organization OrgData `json:"organization"`
@@ -225,7 +261,11 @@ type SeedData struct {
 	Products []ProductData `json:"products"`
 	Tags     []TagData     `json:"tags,omitempty"`
 
-	// Users & Staff
+	// Users & Staff (NOVO SISTEMA)
+	Admins  []AdminData  `json:"admins,omitempty"`  // Usuários admin (tabela admins)
+	Clients []ClientData `json:"clients,omitempty"` // Usuários cliente (tabela clients)
+
+	// Users & Staff (LEGACY - manter para compatibilidade)
 	Users []UserData `json:"users,omitempty"`
 
 	// Customers & Transactions
@@ -240,9 +280,12 @@ type SeedData struct {
 	NotificationConfigs []NotificationConfigData `json:"notification_configs,omitempty"`
 
 	// Configuration
-	Settings              SettingsData              `json:"settings,omitempty"`
+	Settings              SettingsData               `json:"settings,omitempty"`
 	NotificationTemplates []NotificationTemplateData `json:"notification_templates,omitempty"`
-	ThemeCustomization    ThemeCustomizationData    `json:"theme_customization,omitempty"`
+	ThemeCustomization    ThemeCustomizationData     `json:"theme_customization,omitempty"`
+
+	// Staff Sales Records (importação CSV)
+	StaffSalesRecordsCSV []StaffSalesRecordCSVData `json:"staff_sales_records_csv,omitempty"`
 }
 
 func LoadSeedDataFromFile(filePath string) (*SeedData, error) {

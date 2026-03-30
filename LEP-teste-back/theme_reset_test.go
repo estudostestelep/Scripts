@@ -15,7 +15,9 @@ func TestThemeResetQuick() {
 
 	// Create config
 	config := GetDefaultConfig()
-	config.BackendURL = "http://localhost:8080"
+	if config.BackendURL == "" {
+		config.BackendURL = "http://localhost:8080"
+	}
 
 	// Create client
 	logger := NewLogger(true)
@@ -68,8 +70,8 @@ func TestThemeResetQuick() {
 
 	// Check expected defaults
 	expectedDefaults := map[string]string{
-		"primary_color_light":   "#1E293B",
-		"primary_color_dark":    "#F8FAFC",
+		"primary_color_light":    "#1E293B",
+		"primary_color_dark":     "#F8FAFC",
 		"background_color_light": "#FFFFFF",
 		"background_color_dark":  "#0F172A",
 	}

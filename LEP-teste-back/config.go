@@ -38,9 +38,8 @@ func GetDefaultConfig() Config {
 	return Config{
 		// URL do backend - ALTERAR AQUI conforme necessário
 		// Local: "http://localhost:8080"
-		// Online: "https://lep-system-516622888070.us-central1.run.app"
 		BackendURL: "http://localhost:8080",
-		//BackendURL: "https://lep-system-516622888070.us-central1.run.app",
+		//BackendURL: "https://lep-system-341885235510.us-central1.run.app",
 
 		TestUser: TestUser{
 			Email:    "pablo@lep.com",

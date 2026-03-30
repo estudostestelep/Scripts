@@ -36,6 +36,27 @@ func (c *APIClient) SetHeaders(orgID, projID, token string) {
 	c.token = token
 }
 
+// SaveToken retorna o token atual para restauração posterior
+func (c *APIClient) SaveToken() string {
+	return c.token
+}
+
+// RestoreToken restaura um token salvo anteriormente
+func (c *APIClient) RestoreToken(token string) {
+	c.token = token
+}
+
+// SaveContext retorna orgID, projID e token atuais
+func (c *APIClient) SaveContext() (string, string, string) {
+	return c.orgID, c.projID, c.token
+}
+
+// SetOrgProject atualiza apenas orgID e projID sem alterar o token
+func (c *APIClient) SetOrgProject(orgID, projID string) {
+	c.orgID = orgID
+	c.projID = projID
+}
+
 // GetLastStatus retorna o último status HTTP recebido
 func (c *APIClient) GetLastStatus() int {
 	return c.lastStatus

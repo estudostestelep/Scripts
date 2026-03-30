@@ -41,7 +41,8 @@
       "Bash(curl:*)",
       "Bash(timeout 300 go run:*)",
       "Bash(timeout 240 go build:*)",
-      "Bash(timeout:*)"
+      "Bash(timeout:*)",
+      "Bash(./lep-teste-back.exe:*)"
     ],
     "deny": [],
     "ask": []

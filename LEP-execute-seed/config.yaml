@@ -1,15 +1,16 @@
 server:
-  url: https://lep-system-341885235510.us-central1.run.app
-  timeout: 30
+ #url: https://lep-system-341885235510.us-central1.run.app
+ url: http://localhost:8080
+ timeout: 30
 
 auth:
-  organization_name: "LEP Fattoria"
+  organization_name: "Osteria"
   fallback_email: "pablo@lep.com"
   fallback_password: "senha123"
   auto_email: true
 
 seed:
-  file: seed-fattoria.json
+  file: seed-osteria.json
   stop_on_error: false
   parallel: true
 

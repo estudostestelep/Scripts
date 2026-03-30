@@ -2,13 +2,17 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"golang.org/x/text/encoding/charmap"
+	"golang.org/x/text/transform"
 )
 
 // APIClientV2 é um cliente HTTP otimizado para a API LEP
@@ -20,6 +24,7 @@ type APIClientV2 struct {
 	logger  *Logger
 	client  *http.Client
 	config  *Config
+	roleMap map[string]string
 }
 
 // NewAPIClientV2 cria novo cliente de API
@@ -95,8 +100,17 @@ func (c *APIClientV2) doRequest(method, path string, body interface{}) (map[stri
 
 	var result map[string]interface{}
 	if len(respBody) > 0 {
+		// Tentar primeiro como objeto
 		if err := json.Unmarshal(respBody, &result); err != nil {
-			result = map[string]interface{}{"raw": string(respBody)}
+			// Se falhar, tentar como array
+			var arrResult []interface{}
+			if arrErr := json.Unmarshal(respBody, &arrResult); arrErr == nil {
+				// Sucesso: colocar array em um campo "items"
+				result = map[string]interface{}{"items": arrResult}
+			} else {
+				// Falhou em ambos: guardar como raw
+				result = map[string]interface{}{"raw": string(respBody)}
+			}
 		}
 
 		// Log de erro se status não for sucesso
@@ -122,8 +136,8 @@ func (c *APIClientV2) CreateOrganization(name, email, password string) (orgID, p
 		return "", "", err
 	}
 
-	// Se status 409, organização já existe - fazer login
-	if status == 409 {
+	// Se organização já existe (409, 400 com "já existe", ou 500 com duplicate key)
+	if status == 409 || isOrgAlreadyExistsError(resp, status) {
 		c.logger.Info("Organização já existe, fazendo login...")
 		return c.LoginAndGetIDs(email, password)
 	}
@@ -139,7 +153,7 @@ func (c *APIClientV2) CreateOrganization(name, email, password string) (orgID, p
 	return c.extractOrgAndProjID(resp, "")
 }
 
-// LoginAndGetIDs faz login e extrai IDs
+// LoginAndGetIDs faz login e extrai IDs (LEGACY - usa /login)
 func (c *APIClientV2) LoginAndGetIDs(email, password string) (orgID, projID string, err error) {
 	payload := map[string]string{
 		"email":    email,
@@ -160,6 +174,103 @@ func (c *APIClientV2) LoginAndGetIDs(email, password string) (orgID, projID stri
 
 	// extractOrgAndProjID já extrai o token também
 	return c.extractOrgAndProjID(resp, "")
+}
+
+// AdminLogin faz login como admin usando /admin/login
+// Retorna token e permissões do admin
+func (c *APIClientV2) AdminLogin(email, password string) (adminID string, err error) {
+	payload := map[string]string{
+		"email":    email,
+		"password": password,
+	}
+
+	resp, status, err := c.doRequest("POST", "/admin/login", payload)
+	if err != nil {
+		return "", err
+	}
+
+	if status != 200 {
+		if errMsg, ok := resp["message"].(string); ok {
+			return "", fmt.Errorf("status %d: %s", status, errMsg)
+		}
+		if errMsg, ok := resp["error"].(string); ok {
+			return "", fmt.Errorf("status %d: %s", status, errMsg)
+		}
+		return "", fmt.Errorf("status %d", status)
+	}
+
+	// Extrair token
+	if tkn, ok := resp["token"].(string); ok && tkn != "" {
+		c.token = tkn
+	}
+
+	// Extrair admin ID
+	if admin, ok := resp["admin"].(map[string]interface{}); ok {
+		if id, ok := admin["id"].(string); ok {
+			adminID = id
+		}
+	}
+
+	c.logger.Info(fmt.Sprintf("Admin login bem-sucedido (ID: %s)", adminID))
+	return adminID, nil
+}
+
+// ClientLogin faz login como client usando /client/login
+// Requer org_slug para identificar a organização
+func (c *APIClientV2) ClientLogin(email, password, orgSlug string) (clientID, orgID, projID string, err error) {
+	payload := map[string]string{
+		"email":    email,
+		"password": password,
+		"org_slug": orgSlug,
+	}
+
+	resp, status, err := c.doRequest("POST", "/client/login", payload)
+	if err != nil {
+		return "", "", "", err
+	}
+
+	if status != 200 {
+		if errMsg, ok := resp["message"].(string); ok {
+			return "", "", "", fmt.Errorf("status %d: %s", status, errMsg)
+		}
+		if errMsg, ok := resp["error"].(string); ok {
+			return "", "", "", fmt.Errorf("status %d: %s", status, errMsg)
+		}
+		return "", "", "", fmt.Errorf("status %d", status)
+	}
+
+	// Extrair token
+	if tkn, ok := resp["token"].(string); ok && tkn != "" {
+		c.token = tkn
+	}
+
+	// Extrair client ID
+	if client, ok := resp["client"].(map[string]interface{}); ok {
+		if id, ok := client["id"].(string); ok {
+			clientID = id
+		}
+	}
+
+	// Extrair organization ID
+	if org, ok := resp["organization"].(map[string]interface{}); ok {
+		if id, ok := org["id"].(string); ok {
+			orgID = id
+			c.orgID = orgID
+		}
+	}
+
+	// Extrair primeiro projeto
+	if projects, ok := resp["projects"].([]interface{}); ok && len(projects) > 0 {
+		if proj, ok := projects[0].(map[string]interface{}); ok {
+			if id, ok := proj["project_id"].(string); ok {
+				projID = id
+				c.projID = projID
+			}
+		}
+	}
+
+	c.logger.Info(fmt.Sprintf("Client login bem-sucedido (ID: %s, Org: %s)", clientID, orgID))
+	return clientID, orgID, projID, nil
 }
 
 // LoginAndGetIDsForOrg faz login e busca IDs de uma organização específica
@@ -327,7 +438,78 @@ func (c *APIClientV2) extractOrgAndProjID(resp map[string]interface{}, orgName s
 		}
 	}
 
+	// Fallback: se projects/organizations estão vazios (novo sistema user_roles),
+	// buscar organizações via API e encontrar a organização pelo nome
+	if orgName != "" && c.token != "" {
+		c.logger.Info("Projects vazio no login, buscando organizações via API...")
+		foundOrgID, foundProjID, apiErr := c.findOrgAndProjectByName(orgName)
+		if apiErr == nil && foundOrgID != "" && foundProjID != "" {
+			c.orgID = foundOrgID
+			c.projID = foundProjID
+			return foundOrgID, foundProjID, nil
+		}
+		if apiErr != nil {
+			c.logger.Debug(fmt.Sprintf("Fallback API falhou: %v", apiErr))
+		}
+	}
+
 	return "", "", fmt.Errorf("IDs não encontrados na resposta (esperado: projects[0].project_id e projects[0].organization_id)")
+}
+
+// findOrgAndProjectByName busca organização pelo nome via API e retorna orgID e projID
+func (c *APIClientV2) findOrgAndProjectByName(orgName string) (orgID, projID string, err error) {
+	// Buscar todas as organizações
+	resp, status, err := c.doRequest("GET", "/organization", nil)
+	if err != nil {
+		return "", "", err
+	}
+	if status != 200 {
+		return "", "", fmt.Errorf("status %d ao buscar organizações", status)
+	}
+
+	orgs := extractArrayFromResponse(resp)
+	for _, o := range orgs {
+		if org, ok := o.(map[string]interface{}); ok {
+			name, _ := org["name"].(string)
+			if name == orgName {
+				if id, ok := org["id"].(string); ok {
+					orgID = id
+				}
+				break
+			}
+		}
+	}
+
+	if orgID == "" {
+		return "", "", fmt.Errorf("organização '%s' não encontrada via API", orgName)
+	}
+
+	// Buscar projetos dessa organização
+	projResp, projStatus, projErr := c.doRequest("GET", fmt.Sprintf("/project/organization/%s", orgID), nil)
+	if projErr != nil || projStatus != 200 {
+		// Fallback: tentar /project com header da organização
+		c.orgID = orgID
+		projResp, projStatus, projErr = c.doRequest("GET", "/project", nil)
+		if projErr != nil || projStatus != 200 {
+			return orgID, "", fmt.Errorf("não foi possível buscar projetos da organização %s", orgID)
+		}
+	}
+
+	projects := extractArrayFromResponse(projResp)
+	if len(projects) > 0 {
+		if proj, ok := projects[0].(map[string]interface{}); ok {
+			if id, ok := proj["id"].(string); ok {
+				projID = id
+			}
+		}
+	}
+
+	if projID == "" {
+		return orgID, "", fmt.Errorf("nenhum projeto encontrado para organização %s", orgID)
+	}
+
+	c.logger.Info(fmt.Sprintf("Encontrado via API: org=%s, proj=%s", orgID, projID))
+	return orgID, projID, nil
 }
 
 // CreateMenu cria menu
@@ -338,12 +520,12 @@ func (c *APIClientV2) CreateMenu(name string, order int) (uuid.UUID, error) {
 		"active": true,
 	}
 
-	resp, status, err := c.doRequest("POST", "/menu", payload)
+	resp, status, err := c.doRequest("POST", "/admin/menu", payload)
 	if err != nil {
 		return uuid.Nil, err
 	}
 
-	if status == 409 {
+	if isAlreadyExistsError(resp, status) {
 		return uuid.Nil, fmt.Errorf("already_exists")
 	}
 
@@ -363,12 +545,12 @@ func (c *APIClientV2) CreateCategory(menuID string, name string, order int) (uui
 		"active":  true,
 	}
 
-	resp, status, err := c.doRequest("POST", "/category", payload)
+	resp, status, err := c.doRequest("POST", "/admin/category", payload)
 	if err != nil {
 		return uuid.Nil, err
 	}
 
-	if status == 409 {
+	if isAlreadyExistsError(resp, status) {
 		return uuid.Nil, fmt.Errorf("already_exists")
 	}
 
@@ -387,12 +569,12 @@ func (c *APIClientV2) CreateSubcategory(catID string, name string) (uuid.UUID, e
 		"active":      true,
 	}
 
-	resp, status, err := c.doRequest("POST", "/subcategory", payload)
+	resp, status, err := c.doRequest("POST", "/admin/subcategory", payload)
 	if err != nil {
 		return uuid.Nil, err
 	}
 
-	if status == 409 {
+	if isAlreadyExistsError(resp, status) {
 		return uuid.Nil, fmt.Errorf("already_exists")
 	}
 
@@ -416,7 +598,7 @@ func (c *APIClientV2) CreateEnvironment(name string, capacity int) (uuid.UUID, e
 		return uuid.Nil, err
 	}
 
-	if status == 409 {
+	if isAlreadyExistsError(resp, status) {
 		return uuid.Nil, fmt.Errorf("already_exists")
 	}
 
@@ -445,7 +627,7 @@ func (c *APIClientV2) CreateTable(number int, capacity int, envID *string, statu
 		return uuid.Nil, err
 	}
 
-	if respStatus == 409 {
+	if isAlreadyExistsError(resp, respStatus) {
 		return uuid.Nil, fmt.Errorf("already_exists")
 	}
 
@@ -457,7 +639,7 @@ func (c *APIClientV2) CreateTable(number int, capacity int, envID *string, statu
 }
 
 // CreateProduct cria produto
-func (c *APIClientV2) CreateProduct(name string, productType string, priceNormal float64, prepTime int, menuID, categoryID, subcategoryID *string, wineData *WineData) (uuid.UUID, error) {
+func (c *APIClientV2) CreateProduct(name string, productType string, priceNormal float64, prepTime int, menuID, categoryID, subcategoryID *string, wineData *WineData, imageURL string) (uuid.UUID, error) {
 	payload := map[string]interface{}{
 		"name":              name,
 		"type":              productType,
@@ -465,6 +647,11 @@ func (c *APIClientV2) CreateProduct(name string, productType string, priceNormal
 		"prep_time_minutes": prepTime,
 		"active":            true,
 		"order":             0,
+	}
+
+	// Adicionar URL da imagem se fornecida
+	if imageURL != "" {
+		payload["image_url"] = imageURL
 	}
 
 	if menuID != nil && *menuID != "" {
@@ -515,7 +702,7 @@ func (c *APIClientV2) CreateProduct(name string, productType string, priceNormal
 		return uuid.Nil, err
 	}
 
-	if status == 409 {
+	if isAlreadyExistsError(resp, status) {
 		return uuid.Nil, fmt.Errorf("already_exists")
 	}
 
@@ -541,6 +728,7 @@ type WineData struct {
 
 // GetMenuByName busca um menu pelo nome (para evitar duplicatas)
 func (c *APIClientV2) GetMenuByName(name string) (uuid.UUID, error) {
+	// Backend usa /menu para GET (client routes), não /admin/menu
 	resp, status, err := c.doRequest("GET", "/menu", nil)
 	if err != nil {
 		return uuid.Nil, err
@@ -550,14 +738,26 @@ func (c *APIClientV2) GetMenuByName(name string) (uuid.UUID, error) {
 		return uuid.Nil, fmt.Errorf("status %d", status)
 	}
 
+	// Resposta pode vir como array direto ou dentro de "data"
+	var menus []interface{}
+	if data, ok := resp["data"].([]interface{}); ok {
+		menus = data
+	} else {
+		// Tentar como array na raiz (resposta direta do backend)
+		for _, v := range resp {
+			if arr, ok := v.([]interface{}); ok {
+				menus = arr
+				break
+			}
+		}
+	}
+
 	// Procurar menu com esse nome
-	if menus, ok := resp["data"].([]interface{}); ok {
-		for _, m := range menus {
-			if menu, ok := m.(map[string]interface{}); ok {
-				if menuName, ok := menu["name"].(string); ok && menuName == name {
-					if id, ok := menu["id"].(string); ok {
-						return uuid.Parse(id)
-					}
+	for _, m := range menus {
+		if menu, ok := m.(map[string]interface{}); ok {
+			if menuName, ok := menu["name"].(string); ok && menuName == name {
+				if id, ok := menu["id"].(string); ok {
+					return uuid.Parse(id)
 				}
 			}
 		}
@@ -568,6 +768,7 @@ func (c *APIClientV2) GetMenuByName(name string) (uuid.UUID, error) {
 
 // GetCategoryByName busca uma categoria pelo nome
 func (c *APIClientV2) GetCategoryByName(name string) (uuid.UUID, error) {
+	// Backend usa /category para GET (client routes), não /admin/category
 	resp, status, err := c.doRequest("GET", "/category", nil)
 	if err != nil {
 		return uuid.Nil, err
@@ -577,13 +778,12 @@ func (c *APIClientV2) GetCategoryByName(name string) (uuid.UUID, error) {
 		return uuid.Nil, fmt.Errorf("status %d", status)
 	}
 
-	if categories, ok := resp["data"].([]interface{}); ok {
-		for _, cat := range categories {
-			if category, ok := cat.(map[string]interface{}); ok {
-				if catName, ok := category["name"].(string); ok && catName == name {
-					if id, ok := category["id"].(string); ok {
-						return uuid.Parse(id)
-					}
+	categories := extractArrayFromResponse(resp)
+	for _, cat := range categories {
+		if category, ok := cat.(map[string]interface{}); ok {
+			if catName, ok := category["name"].(string); ok && catName == name {
+				if id, ok := category["id"].(string); ok {
+					return uuid.Parse(id)
 				}
 			}
 		}
@@ -594,6 +794,7 @@ func (c *APIClientV2) GetCategoryByName(name string) (uuid.UUID, error) {
 
 // GetSubcategoryByName busca uma subcategoria pelo nome
 func (c *APIClientV2) GetSubcategoryByName(name string) (uuid.UUID, error) {
+	// Backend usa /subcategory para GET (client routes), não /admin/subcategory
 	resp, status, err := c.doRequest("GET", "/subcategory", nil)
 	if err != nil {
 		return uuid.Nil, err
@@ -603,13 +804,12 @@ func (c *APIClientV2) GetSubcategoryByName(name string) (uuid.UUID, error) {
 		return uuid.Nil, fmt.Errorf("status %d", status)
 	}
 
-	if subcategories, ok := resp["data"].([]interface{}); ok {
-		for _, subcat := range subcategories {
-			if subcategory, ok := subcat.(map[string]interface{}); ok {
-				if subcatName, ok := subcategory["name"].(string); ok && subcatName == name {
-					if id, ok := subcategory["id"].(string); ok {
-						return uuid.Parse(id)
-					}
+	subcategories := extractArrayFromResponse(resp)
+	for _, subcat := range subcategories {
+		if subcategory, ok := subcat.(map[string]interface{}); ok {
+			if subcatName, ok := subcategory["name"].(string); ok && subcatName == name {
+				if id, ok := subcategory["id"].(string); ok {
+					return uuid.Parse(id)
 				}
 			}
 		}
@@ -629,13 +829,12 @@ func (c *APIClientV2) GetProductByName(name string) (uuid.UUID, error) {
 		return uuid.Nil, fmt.Errorf("status %d", status)
 	}
 
-	if products, ok := resp["data"].([]interface{}); ok {
-		for _, prod := range products {
-			if product, ok := prod.(map[string]interface{}); ok {
-				if prodName, ok := product["name"].(string); ok && prodName == name {
-					if id, ok := product["id"].(string); ok {
-						return uuid.Parse(id)
-					}
+	products := extractArrayFromResponse(resp)
+	for _, prod := range products {
+		if product, ok := prod.(map[string]interface{}); ok {
+			if prodName, ok := product["name"].(string); ok && prodName == name {
+				if id, ok := product["id"].(string); ok {
+					return uuid.Parse(id)
 				}
 			}
 		}
@@ -655,13 +854,12 @@ func (c *APIClientV2) GetEnvironmentByName(name string) (uuid.UUID, error) {
 		return uuid.Nil, fmt.Errorf("status %d", status)
 	}
 
-	if environments, ok := resp["data"].([]interface{}); ok {
-		for _, env := range environments {
-			if environment, ok := env.(map[string]interface{}); ok {
-				if envName, ok := environment["name"].(string); ok && envName == name {
-					if id, ok := environment["id"].(string); ok {
-						return uuid.Parse(id)
-					}
+	environments := extractArrayFromResponse(resp)
+	for _, env := range environments {
+		if environment, ok := env.(map[string]interface{}); ok {
+			if envName, ok := environment["name"].(string); ok && envName == name {
+				if id, ok := environment["id"].(string); ok {
+					return uuid.Parse(id)
 				}
 			}
 		}
@@ -681,13 +879,12 @@ func (c *APIClientV2) GetTableByNumber(number int) (uuid.UUID, error) {
 		return uuid.Nil, fmt.Errorf("status %d", status)
 	}
 
-	if tables, ok := resp["data"].([]interface{}); ok {
-		for _, tbl := range tables {
-			if table, ok := tbl.(map[string]interface{}); ok {
-				if tblNum, ok := table["number"].(float64); ok && int(tblNum) == number {
-					if id, ok := table["id"].(string); ok {
-						return uuid.Parse(id)
-					}
+	tables := extractArrayFromResponse(resp)
+	for _, tbl := range tables {
+		if table, ok := tbl.(map[string]interface{}); ok {
+			if tblNum, ok := table["number"].(float64); ok && int(tblNum) == number {
+				if id, ok := table["id"].(string); ok {
+					return uuid.Parse(id)
 				}
 			}
 		}
@@ -696,13 +893,72 @@ func (c *APIClientV2) GetTableByNumber(number int) (uuid.UUID, error) {
 	return uuid.Nil, fmt.Errorf("não encontrado")
 }
 
-// CreateUser cria um novo usuário
+// GetSystemRoles busca os cargos do sistema e retorna mapa nome->id
+func (c *APIClientV2) GetSystemRoles() (map[string]string, error) {
+	resp, status, err := c.doRequest("GET", "/role/system", nil)
+	if err != nil {
+		return nil, err
+	}
+	if status != 200 {
+		return nil, fmt.Errorf("status %d ao buscar roles", status)
+	}
+	roles := extractArrayFromResponse(resp)
+	roleMap := make(map[string]string)
+	for _, r := range roles {
+		if role, ok := r.(map[string]interface{}); ok {
+			name, _ := role["name"].(string)
+			id, _ := role["id"].(string)
+			if name != "" && id != "" {
+				roleMap[name] = id
+			}
+		}
+	}
+	return roleMap, nil
+}
+
+// CreateUser cria um novo usuário (client-user) na organização
 func (c *APIClientV2) CreateUser(name, email, password, role string, permissions []string) (uuid.UUID, error) {
+	active := true
 	payload := map[string]interface{}{
 		"name":     name,
 		"email":    email,
 		"password": password,
-		"role":     role,
+		"org_id":   c.orgID,
+		"active":   active,
+	}
+
+	if c.projID != "" {
+		payload["proj_ids"] = []string{c.projID}
+	}
+
+	resp, status, err := c.doRequest("POST", "/client-user", payload)
+	if err != nil {
+		return uuid.Nil, err
+	}
+
+	if isAlreadyExistsError(resp, status) {
+		return uuid.Nil, fmt.Errorf("already_exists")
+	}
+
+	if status != 200 && status != 201 {
+		details := ""
+		for _, key := range []string{"details", "error", "message"} {
+			if v, ok := resp[key].(string); ok && v != "" {
+				details += " " + v
+			}
+		}
+		return uuid.Nil, fmt.Errorf("status %d:%s", status, details)
+	}
+
+	return extractIDFromResponse(resp)
+}
+
+// CreateAdmin cria um novo admin (tabela admins)
+func (c *APIClientV2) CreateAdmin(name, email, password string, permissions []string) (uuid.UUID, error) {
+	payload := map[string]interface{}{
+		"name":     name,
+		"email":    email,
+		"password": password,
 		"active":   true,
 	}
 
@@ -710,12 +966,12 @@ func (c *APIClientV2) CreateUser(name, email, password, role string, permissions
 		payload["permissions"] = permissions
 	}
 
-	resp, status, err := c.doRequest("POST", "/user", payload)
+	resp, status, err := c.doRequest("POST", "/admin/admin-user", payload)
 	if err != nil {
 		return uuid.Nil, err
 	}
 
-	if status == 409 {
+	if isAlreadyExistsError(resp, status) {
 		return uuid.Nil, fmt.Errorf("already_exists")
 	}
 
@@ -726,9 +982,9 @@ func (c *APIClientV2) CreateUser(name, email, password, role string, permissions
 	return extractIDFromResponse(resp)
 }
 
-// GetUserByEmail busca um usuário pelo email
-func (c *APIClientV2) GetUserByEmail(email string) (uuid.UUID, error) {
-	resp, status, err := c.doRequest("GET", "/user", nil)
+// GetAdminByEmail busca um admin pelo email
+func (c *APIClientV2) GetAdminByEmail(email string) (uuid.UUID, error) {
+	resp, status, err := c.doRequest("GET", "/admin/admin-user", nil)
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -737,13 +993,98 @@ func (c *APIClientV2) GetUserByEmail(email string) (uuid.UUID, error) {
 		return uuid.Nil, fmt.Errorf("status %d", status)
 	}
 
-	if users, ok := resp["data"].([]interface{}); ok {
-		for _, u := range users {
-			if user, ok := u.(map[string]interface{}); ok {
-				if userEmail, ok := user["email"].(string); ok && userEmail == email {
-					if id, ok := user["id"].(string); ok {
-						return uuid.Parse(id)
-					}
+	admins := extractArrayFromResponse(resp)
+	for _, a := range admins {
+		if admin, ok := a.(map[string]interface{}); ok {
+			if adminEmail, ok := admin["email"].(string); ok && adminEmail == email {
+				if id, ok := admin["id"].(string); ok {
+					return uuid.Parse(id)
+				}
+			}
+		}
+	}
+
+	return uuid.Nil, fmt.Errorf("não encontrado")
+}
+
+// CreateClientUser cria um novo client (tabela clients)
+// orgID: organização a qual o client pertence
+// projIDs: lista de projetos que o client pode acessar
+func (c *APIClientV2) CreateClientUser(name, email, password, orgID string, projIDs, permissions []string) (uuid.UUID, error) {
+	payload := map[string]interface{}{
+		"name":     name,
+		"email":    email,
+		"password": password,
+		"org_id":   orgID,
+		"active":   true,
+	}
+
+	if len(projIDs) > 0 {
+		payload["proj_ids"] = projIDs
+	}
+
+	if len(permissions) > 0 {
+		payload["permissions"] = permissions
+	}
+
+	resp, status, err := c.doRequest("POST", "/admin/client-user", payload)
+	if err != nil {
+		return uuid.Nil, err
+	}
+
+	if isAlreadyExistsError(resp, status) {
+		return uuid.Nil, fmt.Errorf("already_exists")
+	}
+
+	if status != 200 && status != 201 {
+		return uuid.Nil, fmt.Errorf("status %d", status)
+	}
+
+	return extractIDFromResponse(resp)
+}
+
+// GetClientUserByEmail busca um client pelo email
+func (c *APIClientV2) GetClientUserByEmail(email string) (uuid.UUID, error) {
+	resp, status, err := c.doRequest("GET", "/admin/client-user", nil)
+	if err != nil {
+		return uuid.Nil, err
+	}
+
+	if status != 200 {
+		return uuid.Nil, fmt.Errorf("status %d", status)
+	}
+
+	clients := extractArrayFromResponse(resp)
+	for _, cl := range clients {
+		if client, ok := cl.(map[string]interface{}); ok {
+			if clientEmail, ok := client["email"].(string); ok && clientEmail == email {
+				if id, ok := client["id"].(string); ok {
+					return uuid.Parse(id)
+				}
+			}
+		}
+	}
+
+	return uuid.Nil, fmt.Errorf("não encontrado")
+}
+
+// GetUserByEmail busca um usuário pelo email
+func (c *APIClientV2) GetUserByEmail(email string) (uuid.UUID, error) {
+	resp, status, err := c.doRequest("GET", "/client-user", nil)
+	if err != nil {
+		return uuid.Nil, err
+	}
+
+	if status != 200 {
+		return uuid.Nil, fmt.Errorf("status %d", status)
+	}
+
+	users := extractArrayFromResponse(resp)
+	for _, u := range users {
+		if user, ok := u.(map[string]interface{}); ok {
+			if userEmail, ok := user["email"].(string); ok && userEmail == email {
+				if id, ok := user["id"].(string); ok {
+					return uuid.Parse(id)
 				}
 			}
 		}
@@ -774,7 +1115,7 @@ func (c *APIClientV2) CreateCustomer(name, email, phone, birthDate, notes string
 		return uuid.Nil, err
 	}
 
-	if status == 409 {
+	if isAlreadyExistsError(resp, status) {
 		return uuid.Nil, fmt.Errorf("already_exists")
 	}
 
@@ -796,13 +1137,12 @@ func (c *APIClientV2) GetCustomerByEmail(email string) (uuid.UUID, error) {
 		return uuid.Nil, fmt.Errorf("status %d", status)
 	}
 
-	if customers, ok := resp["data"].([]interface{}); ok {
-		for _, cust := range customers {
-			if customer, ok := cust.(map[string]interface{}); ok {
-				if custEmail, ok := customer["email"].(string); ok && custEmail == email {
-					if id, ok := customer["id"].(string); ok {
-						return uuid.Parse(id)
-					}
+	customers := extractArrayFromResponse(resp)
+	for _, cust := range customers {
+		if customer, ok := cust.(map[string]interface{}); ok {
+			if custEmail, ok := customer["email"].(string); ok && custEmail == email {
+				if id, ok := customer["id"].(string); ok {
+					return uuid.Parse(id)
 				}
 			}
 		}
@@ -834,7 +1174,7 @@ func (c *APIClientV2) CreateReservation(customerID, tableID string, dateTime str
 		return uuid.Nil, err
 	}
 
-	if respStatus == 409 {
+	if isAlreadyExistsError(resp, respStatus) {
 		return uuid.Nil, fmt.Errorf("already_exists")
 	}
 
@@ -856,13 +1196,12 @@ func (c *APIClientV2) GetReservationByConfirmationKey(confirmationKey string) (u
 		return uuid.Nil, fmt.Errorf("status %d", status)
 	}
 
-	if reservations, ok := resp["data"].([]interface{}); ok {
-		for _, res := range reservations {
-			if reservation, ok := res.(map[string]interface{}); ok {
-				if key, ok := reservation["confirmation_key"].(string); ok && key == confirmationKey {
-					if id, ok := reservation["id"].(string); ok {
-						return uuid.Parse(id)
-					}
+	reservations := extractArrayFromResponse(resp)
+	for _, res := range reservations {
+		if reservation, ok := res.(map[string]interface{}); ok {
+			if key, ok := reservation["confirmation_key"].(string); ok && key == confirmationKey {
+				if id, ok := reservation["id"].(string); ok {
+					return uuid.Parse(id)
 				}
 			}
 		}
@@ -895,7 +1234,7 @@ func (c *APIClientV2) CreateTag(name, color, description, entityType string) (uu
 		return uuid.Nil, err
 	}
 
-	if status == 409 {
+	if isAlreadyExistsError(resp, status) {
 		return uuid.Nil, fmt.Errorf("already_exists")
 	}
 
@@ -917,13 +1256,12 @@ func (c *APIClientV2) GetTagByName(name string) (uuid.UUID, error) {
 		return uuid.Nil, fmt.Errorf("status %d", status)
 	}
 
-	if tags, ok := resp["data"].([]interface{}); ok {
-		for _, t := range tags {
-			if tag, ok := t.(map[string]interface{}); ok {
-				if tagName, ok := tag["name"].(string); ok && tagName == name {
-					if id, ok := tag["id"].(string); ok {
-						return uuid.Parse(id)
-					}
+	tags := extractArrayFromResponse(resp)
+	for _, t := range tags {
+		if tag, ok := t.(map[string]interface{}); ok {
+			if tagName, ok := tag["name"].(string); ok && tagName == name {
+				if id, ok := tag["id"].(string); ok {
+					return uuid.Parse(id)
 				}
 			}
 		}
@@ -934,7 +1272,7 @@ func (c *APIClientV2) GetTagByName(name string) (uuid.UUID, error) {
 
 // AddCategoryToSubcategory vincula subcategoria a uma categoria (relacionamento N:M)
 func (c *APIClientV2) AddCategoryToSubcategory(subcatID, catID string) error {
-	path := fmt.Sprintf("/subcategory/%s/category/%s", subcatID, catID)
+	path := fmt.Sprintf("/admin/subcategory/%s/category/%s", subcatID, catID)
 
 	// Backend espera JSON body com category_id (mesmo com path param)
 	payload := map[string]interface{}{
@@ -959,20 +1297,27 @@ func (c *APIClientV2) AddCategoryToSubcategory(subcatID, catID string) error {
 
 // AddTagToProduct vincula tag a um produto (relacionamento N:M)
 func (c *APIClientV2) AddTagToProduct(productID, tagID string) error {
-	path := fmt.Sprintf("/product/%s/tag/%s", productID, tagID)
+	path := fmt.Sprintf("/product/%s/tags", productID)
 
 	// Backend espera JSON body com tag_id (mesmo com path param)
 	payload := map[string]interface{}{
 		"tag_id": tagID,
 	}
 
-	_, status, err := c.doRequest("POST", path, payload)
+	resp, status, err := c.doRequest("POST", path, payload)
 	if err != nil {
 		return err
 	}
 
 	if status == 409 {
 		return nil // Relacionamento já existe, ignorar
+	}
+
+	// Tratar duplicate key como "já existe"
+	if status == 500 {
+		if details, ok := resp["details"].(string); ok && strings.Contains(details, "duplicate key") {
+			return nil
+		}
 	}
 
 	if status != 200 && status != 201 {
@@ -1011,17 +1356,10 @@ func (c *APIClientV2) CreateSettings(settings *SettingsData) error {
 		payload["timezone"] = settings.Timezone
 	}
 
-	_, status, err := c.doRequest("POST", "/settings", payload)
+	// Backend usa PUT /settings (não POST)
+	_, status, err := c.doRequest("PUT", "/settings", payload)
 	if err != nil {
 		return err
-	}
-
-	if status == 409 {
-		// Settings já existe, tentar atualizar
-		_, status, err = c.doRequest("PUT", "/settings", payload)
-		if err != nil {
-			return err
-		}
 	}
 
 	if status != 200 && status != 201 {
@@ -1044,7 +1382,8 @@ func (c *APIClientV2) CreateNotificationTemplate(template *NotificationTemplateD
 		payload["subject"] = template.Subject
 	}
 
-	resp, status, err := c.doRequest("POST", "/notification-template", payload)
+	// Backend usa /notification/template (não /notification-template)
+	resp, status, err := c.doRequest("POST", "/notification/template", payload)
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -1095,14 +1434,15 @@ func (c *APIClientV2) CreateThemeCustomization(theme *ThemeCustomizationData) er
 		"is_active":                    theme.IsActive,
 	}
 
-	_, status, err := c.doRequest("POST", "/theme-customization", payload)
+	// Backend usa /project/settings/theme (não /theme-customization)
+	_, status, err := c.doRequest("POST", "/project/settings/theme", payload)
 	if err != nil {
 		return err
 	}
 
 	if status == 409 {
 		// Theme já existe, tentar atualizar
-		_, status, err = c.doRequest("PUT", "/theme-customization", payload)
+		_, status, err = c.doRequest("PUT", "/project/settings/theme", payload)
 		if err != nil {
 			return err
 		}
@@ -1117,7 +1457,8 @@ func (c *APIClientV2) CreateThemeCustomization(theme *ThemeCustomizationData) er
 
 // GetNotificationTemplateByName busca template por nome
 func (c *APIClientV2) GetNotificationTemplateByName(name string) (uuid.UUID, error) {
-	resp, status, err := c.doRequest("GET", "/notification-template", nil)
+	path := fmt.Sprintf("/notification/templates/%s/%s", c.orgID, c.projID)
+	resp, status, err := c.doRequest("GET", path, nil)
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -1126,19 +1467,200 @@ func (c *APIClientV2) GetNotificationTemplateByName(name string) (uuid.UUID, err
 		return uuid.Nil, fmt.Errorf("status %d", status)
 	}
 
-	if templates, ok := resp["data"].([]interface{}); ok {
-		for _, t := range templates {
-			if template, ok := t.(map[string]interface{}); ok {
-				if tName, ok := template["name"].(string); ok && tName == name {
-					if id, ok := template["id"].(string); ok {
-						return uuid.Parse(id)
-					}
+	templates := extractArrayFromResponse(resp)
+	for _, t := range templates {
+		if template, ok := t.(map[string]interface{}); ok {
+			if tName, ok := template["name"].(string); ok && tName == name {
+				if id, ok := template["id"].(string); ok {
+					return uuid.Parse(id)
 				}
 			}
 		}
 	}
 
 	return uuid.Nil, fmt.Errorf("não encontrado")
+}
+
+// GetPackages obtém lista de pacotes disponíveis
+func (c *APIClientV2) GetPackages() ([]map[string]interface{}, error) {
+	resp, status, err := c.doRequest("GET", "/package", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if status != 200 {
+		return nil, fmt.Errorf("status %d", status)
+	}
+
+	// Extrair array de pacotes
+	data := extractArrayFromResponse(resp)
+	packages := make([]map[string]interface{}, 0)
+	for _, p := range data {
+		if pkg, ok := p.(map[string]interface{}); ok {
+			packages = append(packages, pkg)
+		}
+	}
+	return packages, nil
+}
+
+// GetPackageByCodeName busca um pacote pelo code_name (enterprise, professional, starter, free)
+func (c *APIClientV2) GetPackageByCodeName(codeName string) (string, error) {
+	packages, err := c.GetPackages()
+	if err != nil {
+		return "", err
+	}
+
+	for _, pkg := range packages {
+		if code, ok := pkg["code_name"].(string); ok && code == codeName {
+			if id, ok := pkg["id"].(string); ok {
+				return id, nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("pacote '%s' não encontrado", codeName)
+}
+
+// SubscribeToPackage assina a organização em um pacote
+// billingCycle: "monthly" ou "yearly"
+func (c *APIClientV2) SubscribeToPackage(packageID, billingCycle string) error {
+	payload := map[string]interface{}{
+		"package_id":    packageID,
+		"billing_cycle": billingCycle,
+	}
+
+	_, status, err := c.doRequest("POST", "/package/subscribe", payload)
+	if err != nil {
+		return err
+	}
+
+	if status == 409 {
+		return nil // Já assinado
+	}
+
+	if status != 200 && status != 201 {
+		return fmt.Errorf("status %d", status)
+	}
+
+	return nil
+}
+
+// GetCurrentSubscription obtém a assinatura atual da organização
+func (c *APIClientV2) GetCurrentSubscription() (map[string]interface{}, error) {
+	resp, status, err := c.doRequest("GET", "/package/subscription", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if status == 404 {
+		return nil, fmt.Errorf("sem_assinatura")
+	}
+
+	if status != 200 {
+		return nil, fmt.Errorf("status %d", status)
+	}
+
+	if data, ok := resp["data"].(map[string]interface{}); ok {
+		return data, nil
+	}
+
+	return nil, fmt.Errorf("formato de resposta inválido")
+}
+
+// EnsureEnterpriseSubscription garante que a organização tem assinatura Enterprise
+func (c *APIClientV2) EnsureEnterpriseSubscription() error {
+	// 1. Verificar assinatura atual
+	sub, err := c.GetCurrentSubscription()
+	if err == nil && sub != nil {
+		// Verificar se já é Enterprise
+		if pkgData, ok := sub["package"].(map[string]interface{}); ok {
+			if codeName, ok := pkgData["code_name"].(string); ok && codeName == "enterprise" {
+				c.logger.Info("Organização já possui plano Enterprise")
+				return nil
+			}
+		}
+	}
+
+	// 2. Buscar ID do pacote Enterprise
+	enterpriseID, err := c.GetPackageByCodeName("enterprise")
+	if err != nil {
+		return fmt.Errorf("erro ao buscar pacote Enterprise: %w", err)
+	}
+
+	// 3. Assinar Enterprise
+	err = c.SubscribeToPackage(enterpriseID, "yearly")
+	if err != nil {
+		return fmt.Errorf("erro ao assinar Enterprise: %w", err)
+	}
+
+	c.logger.Info("Assinatura Enterprise ativada com sucesso")
+	return nil
+}
+
+// isAlreadyExistsError verifica se a resposta indica que o recurso já existe
+// Trata tanto status 409 quanto status 500 com "already_exists" no body
+func isAlreadyExistsError(resp map[string]interface{}, status int) bool {
+	if status == 409 {
+		return true
+	}
+
+	// Verificar se status 500 contém "already_exists" nos detalhes
+	if status == 500 {
+		if details, ok := resp["details"].(string); ok {
+			if strings.Contains(details, "already_exists") {
+				return true
+			}
+		}
+		if msg, ok := resp["message"].(string); ok {
+			if strings.Contains(strings.ToLower(msg), "already exists") {
+				return true
+			}
+		}
+		if errMsg, ok := resp["error"].(string); ok {
+			if strings.Contains(strings.ToLower(errMsg), "already exists") {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// isOrgAlreadyExistsError verifica se o erro indica que a organização já existe
+func isOrgAlreadyExistsError(resp map[string]interface{}, status int) bool {
+	if status == 400 || status == 500 {
+		for _, key := range []string{"message", "details", "error"} {
+			if msg, ok := resp[key].(string); ok {
+				lower := strings.ToLower(msg)
+				if strings.Contains(lower, "já existe") || strings.Contains(lower, "already exists") || strings.Contains(lower, "duplicate key") {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// extractArrayFromResponse extrai array da resposta JSON (pode vir em "data", "items" ou diretamente)
+func extractArrayFromResponse(resp map[string]interface{}) []interface{} {
+	// Tentar extrair do campo "data"
+	if data, ok := resp["data"].([]interface{}); ok {
+		return data
+	}
+
+	// Tentar extrair do campo "items" (usado quando backend retorna array direto)
+	if items, ok := resp["items"].([]interface{}); ok {
+		return items
+	}
+
+	// Tentar como array direto na resposta (fallback)
+	for _, v := range resp {
+		if arr, ok := v.([]interface{}); ok {
+			return arr
+		}
+	}
+
+	return nil
 }
 
 // extractIDFromResponse extrai ID da resposta JSON
@@ -1156,4 +1678,72 @@ func extractIDFromResponse(resp map[string]interface{}) (uuid.UUID, error) {
 	}
 
 	return uuid.Nil, fmt.Errorf("ID não encontrado na resposta")
+}
+
+// ==================== Staff Sales CSV Import ====================
+
+// ImportCSVResponse representa a resposta da importação de CSV
+type ImportCSVResponse struct {
+	BatchId      string   `json:"batch_id"`
+	RecordsCount int      `json:"records_count"`
+	Status       string   `json:"status"`
+	Errors       []string `json:"errors,omitempty"`
+}
+
+// convertLatin1ToUTF8 converte conteúdo de Latin1/Windows-1252 para UTF-8
+func convertLatin1ToUTF8(content []byte) ([]byte, error) {
+	reader := transform.NewReader(
+		bytes.NewReader(content),
+		charmap.Windows1252.NewDecoder(),
+	)
+	return io.ReadAll(reader)
+}
+
+// ImportStaffSalesCSV importa registros de vendas via CSV
+func (c *APIClientV2) ImportStaffSalesCSV(fileName string, csvContent []byte) (*ImportCSVResponse, error) {
+	// Converter de Windows-1252 (Latin1) para UTF-8
+	utf8Content, err := convertLatin1ToUTF8(csvContent)
+	if err != nil {
+		c.logger.Debug(fmt.Sprintf("Aviso: falha na conversão de encoding, usando original: %v", err))
+		utf8Content = csvContent
+	}
+
+	base64Content := base64.StdEncoding.EncodeToString(utf8Content)
+
+	payload := map[string]string{
+		"file_name":    fileName,
+		"file_content": base64Content,
+	}
+
+	resp, status, err := c.doRequest("POST", "/staff/dashboard/import", payload)
+	if err != nil {
+		return nil, err
+	}
+
+	if status != 200 {
+		if errMsg, ok := resp["message"].(string); ok {
+			return nil, fmt.Errorf("status %d: %s", status, errMsg)
+		}
+		return nil, fmt.Errorf("status %d", status)
+	}
+
+	result := &ImportCSVResponse{}
+	if batchId, ok := resp["batch_id"].(string); ok {
+		result.BatchId = batchId
+	}
+	if count, ok := resp["records_count"].(float64); ok {
+		result.RecordsCount = int(count)
+	}
+	if statusStr, ok := resp["status"].(string); ok {
+		result.Status = statusStr
+	}
+	if errors, ok := resp["errors"].([]interface{}); ok {
+		for _, e := range errors {
+			if s, ok := e.(string); ok {
+				result.Errors = append(result.Errors, s)
+			}
+		}
+	}
+
+	return result, nil
 }
