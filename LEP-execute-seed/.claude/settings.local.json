@@ -61,7 +61,12 @@
       "Bash(/c/Go/bin/go.exe mod:*)",
       "Bash(/c/Go/bin/go.exe build:*)",
       "Bash(timeout 90 /c/Go/bin/go.exe run:*)",
-      "Bash(timeout 20 /c/Go/bin/go.exe run:*)"
+      "Bash(timeout 20 /c/Go/bin/go.exe run:*)",
+      "Bash(timeout 180 /c/Go/bin/go.exe run:*)",
+      "Bash(cd:*)",
+      "Bash(tasklist)",
+      "Bash(netstat -ano)",
+      "Bash(tasklist /FI \"PID eq 35152\")"
     ],
     "deny": [],
     "ask": []
