@@ -1,0 +1,430 @@
+{
+  "organization": {
+    "name": "Restaurante Demo",
+    "slug": "demo",
+    "email": "demo@lep.com",
+    "phone": "+5511999990000",
+    "address": "Av. Paulista, 1000 - Bela Vista - Sao Paulo, SP",
+    "website": "https://demo.lep.com.br",
+    "description": "Restaurante de demonstracao do sistema LEP - Acesso a todas as funcionalidades"
+  },
+  "menus": [
+    {
+      "name": "Cardapio Principal",
+      "description": "Cardapio completo do restaurante",
+      "active": true,
+      "order": 1,
+      "priority": 1,
+      "time_range_start": "11:00",
+      "time_range_end": "23:00",
+      "applicable_days": "0,1,2,3,4,5,6"
+    },
+    {
+      "name": "Cardapio Executivo",
+      "description": "Menu executivo para almoco",
+      "active": true,
+      "order": 2,
+      "priority": 2,
+      "time_range_start": "11:30",
+      "time_range_end": "15:00",
+      "applicable_days": "1,2,3,4,5"
+    }
+  ],
+  "categories": [
+    {
+      "name": "Entradas",
+      "description": "Entradas e petiscos",
+      "menu_id_ref": 0,
+      "active": true,
+      "order": 1
+    },
+    {
+      "name": "Pratos Principais",
+      "description": "Pratos principais do cardapio",
+      "menu_id_ref": 0,
+      "active": true,
+      "order": 2
+    },
+    {
+      "name": "Sobremesas",
+      "description": "Sobremesas e doces",
+      "menu_id_ref": 0,
+      "active": true,
+      "order": 3
+    },
+    {
+      "name": "Bebidas",
+      "description": "Bebidas em geral",
+      "menu_id_ref": 0,
+      "active": true,
+      "order": 4
+    }
+  ],
+  "subcategories": [
+    {
+      "name": "Frios",
+      "description": "Entradas frias",
+      "category_id_ref": 0,
+      "active": true,
+      "order": 1
+    },
+    {
+      "name": "Quentes",
+      "description": "Entradas quentes",
+      "category_id_ref": 0,
+      "active": true,
+      "order": 2
+    },
+    {
+      "name": "Carnes",
+      "description": "Pratos com carne",
+      "category_id_ref": 1,
+      "active": true,
+      "order": 1
+    },
+    {
+      "name": "Peixes",
+      "description": "Pratos com peixe",
+      "category_id_ref": 1,
+      "active": true,
+      "order": 2
+    }
+  ],
+  "environments": [
+    {
+      "name": "Salao Principal",
+      "description": "Area principal do restaurante",
+      "capacity": 40,
+      "active": true
+    },
+    {
+      "name": "Area Externa",
+      "description": "Mesas na area externa",
+      "capacity": 20,
+      "active": true
+    }
+  ],
+  "tables": [
+    { "number": 1, "capacity": 2, "location": "Janela", "status": "livre", "environment_id_ref": 0 },
+    { "number": 2, "capacity": 2, "location": "Janela", "status": "livre", "environment_id_ref": 0 },
+    { "number": 3, "capacity": 4, "location": "Centro", "status": "livre", "environment_id_ref": 0 },
+    { "number": 4, "capacity": 4, "location": "Centro", "status": "livre", "environment_id_ref": 0 },
+    { "number": 5, "capacity": 4, "location": "Canto", "status": "livre", "environment_id_ref": 0 },
+    { "number": 6, "capacity": 6, "location": "Reservado", "status": "livre", "environment_id_ref": 0 },
+    { "number": 7, "capacity": 4, "location": "Varanda", "status": "livre", "environment_id_ref": 1 },
+    { "number": 8, "capacity": 4, "location": "Jardim", "status": "livre", "environment_id_ref": 1 },
+    { "number": 9, "capacity": 6, "location": "Jardim", "status": "livre", "environment_id_ref": 1 },
+    { "number": 10, "capacity": 8, "location": "Grupo", "status": "livre", "environment_id_ref": 1 }
+  ],
+  "products": [
+    {
+      "name": "Bruschetta Italiana",
+      "description": "Pao italiano com tomate, manjericao e azeite",
+      "type": "food",
+      "price_normal": 28.90,
+      "price_promo": 0,
+      "menu_id_ref": 0,
+      "category_id_ref": 0,
+      "subcategory_id_ref": 0,
+      "active": true,
+      "order": 1,
+      "prep_time_minutes": 10
+    },
+    {
+      "name": "Carpaccio de Carne",
+      "description": "Finas fatias de carne com rucula e parmesao",
+      "type": "food",
+      "price_normal": 45.90,
+      "price_promo": 0,
+      "menu_id_ref": 0,
+      "category_id_ref": 0,
+      "subcategory_id_ref": 0,
+      "active": true,
+      "order": 2,
+      "prep_time_minutes": 15
+    },
+    {
+      "name": "File Mignon ao Molho Madeira",
+      "description": "File mignon grelhado com molho madeira e arroz",
+      "type": "food",
+      "price_normal": 89.90,
+      "price_promo": 0,
+      "menu_id_ref": 0,
+      "category_id_ref": 1,
+      "subcategory_id_ref": 2,
+      "active": true,
+      "order": 1,
+      "prep_time_minutes": 25
+    },
+    {
+      "name": "Salmao Grelhado",
+      "description": "Salmao grelhado com legumes salteados",
+      "type": "food",
+      "price_normal": 79.90,
+      "price_promo": 0,
+      "menu_id_ref": 0,
+      "category_id_ref": 1,
+      "subcategory_id_ref": 3,
+      "active": true,
+      "order": 2,
+      "prep_time_minutes": 20
+    },
+    {
+      "name": "Risoto de Funghi",
+      "description": "Risoto cremoso com cogumelos frescos",
+      "type": "food",
+      "price_normal": 68.90,
+      "price_promo": 0,
+      "menu_id_ref": 0,
+      "category_id_ref": 1,
+      "active": true,
+      "order": 3,
+      "prep_time_minutes": 22
+    },
+    {
+      "name": "Tiramisu",
+      "description": "Classica sobremesa italiana com mascarpone",
+      "type": "food",
+      "price_normal": 28.90,
+      "price_promo": 0,
+      "menu_id_ref": 0,
+      "category_id_ref": 2,
+      "active": true,
+      "order": 1,
+      "prep_time_minutes": 5
+    },
+    {
+      "name": "Petit Gateau",
+      "description": "Bolinho de chocolate com sorvete de creme",
+      "type": "food",
+      "price_normal": 32.90,
+      "price_promo": 0,
+      "menu_id_ref": 0,
+      "category_id_ref": 2,
+      "active": true,
+      "order": 2,
+      "prep_time_minutes": 15
+    },
+    {
+      "name": "Suco Natural",
+      "description": "Suco de laranja, limao, maracuja ou abacaxi",
+      "type": "drink",
+      "price_normal": 12.90,
+      "price_promo": 0,
+      "menu_id_ref": 0,
+      "category_id_ref": 3,
+      "active": true,
+      "order": 1,
+      "prep_time_minutes": 5
+    },
+    {
+      "name": "Refrigerante",
+      "description": "Coca-Cola, Guarana ou Sprite - 350ml",
+      "type": "drink",
+      "price_normal": 8.90,
+      "price_promo": 0,
+      "menu_id_ref": 0,
+      "category_id_ref": 3,
+      "active": true,
+      "order": 2,
+      "prep_time_minutes": 1
+    },
+    {
+      "name": "Agua Mineral",
+      "description": "Com ou sem gas - 500ml",
+      "type": "drink",
+      "price_normal": 6.90,
+      "price_promo": 0,
+      "menu_id_ref": 0,
+      "category_id_ref": 3,
+      "active": true,
+      "order": 3,
+      "prep_time_minutes": 1
+    }
+  ],
+  "tags": [
+    { "name": "Vegetariano", "color": "#22c55e", "description": "Pratos vegetarianos", "entity_type": "product", "active": true },
+    { "name": "Sem Gluten", "color": "#eab308", "description": "Pratos sem gluten", "entity_type": "product", "active": true },
+    { "name": "Picante", "color": "#ef4444", "description": "Pratos picantes", "entity_type": "product", "active": true },
+    { "name": "Chef Recomenda", "color": "#8b5cf6", "description": "Recomendacao do chef", "entity_type": "product", "active": true },
+    { "name": "Promocao", "color": "#f97316", "description": "Itens em promocao", "entity_type": "product", "active": true }
+  ],
+  "admins": [
+    {
+      "name": "Administrador Demo",
+      "email": "demo@lep.com",
+      "password": "demo123",
+      "role": "owner",
+      "active": true
+    }
+  ],
+  "clients": [
+    {
+      "name": "Gerente Demo",
+      "email": "gerente@demo.lep.com",
+      "password": "demo123",
+      "role": "manager",
+      "active": true
+    },
+    {
+      "name": "Garcom Demo",
+      "email": "garcom@demo.lep.com",
+      "password": "demo123",
+      "role": "waiter",
+      "active": true
+    },
+    {
+      "name": "Cozinha Demo",
+      "email": "cozinha@demo.lep.com",
+      "password": "demo123",
+      "role": "kitchen",
+      "active": true
+    }
+  ],
+  "customers": [
+    {
+      "name": "Joao Silva",
+      "email": "joao.silva@email.com",
+      "phone": "+5511999998888",
+      "notes": "Cliente VIP - preferencia por mesa na janela",
+      "active": true
+    },
+    {
+      "name": "Maria Santos",
+      "email": "maria.santos@email.com",
+      "phone": "+5511999997777",
+      "notes": "Alergica a frutos do mar",
+      "active": true
+    },
+    {
+      "name": "Carlos Oliveira",
+      "email": "carlos.oliveira@email.com",
+      "phone": "+5511999996666",
+      "active": true
+    },
+    {
+      "name": "Ana Costa",
+      "email": "ana.costa@email.com",
+      "phone": "+5511999995555",
+      "notes": "Vegetariana",
+      "active": true
+    },
+    {
+      "name": "Pedro Lima",
+      "email": "pedro.lima@email.com",
+      "phone": "+5511999994444",
+      "notes": "Aniversario em marco",
+      "active": true
+    }
+  ],
+  "settings": {
+    "reservation_min_advance_hours": 2,
+    "reservation_max_advance_days": 30,
+    "notify_reservation_create": true,
+    "notify_reservation_update": true,
+    "notify_reservation_cancel": true,
+    "notify_table_available": true,
+    "notify_confirmation_24h": true,
+    "default_notification_channel": "whatsapp",
+    "enable_sms": true,
+    "enable_email": true,
+    "enable_whatsapp": true,
+    "timezone": "America/Sao_Paulo",
+    "confirmation_hours_before": 24,
+    "reminder_hours_before": 2,
+    "auto_cancel_no_response_hours": 0,
+    "response_processing_mode": "automatic"
+  },
+  "notification_templates": [
+    {
+      "name": "Confirmacao de Reserva",
+      "channel": "whatsapp",
+      "subject": "Reserva Confirmada",
+      "body": "Ola {customer_name}! Sua reserva no {restaurant_name} esta confirmada para {reservation_date} as {reservation_time}. Mesa: {table_number} | Pessoas: {party_size}. Aguardamos voce!",
+      "active": true
+    },
+    {
+      "name": "Pedido de Confirmacao",
+      "channel": "whatsapp",
+      "subject": "Confirme sua Reserva",
+      "body": "Ola {customer_name}! Lembramos que sua reserva no {restaurant_name} e amanha, {reservation_date} as {reservation_time}. Responda SIM para confirmar ou NAO para cancelar.",
+      "active": true
+    },
+    {
+      "name": "Lembrete de Reserva",
+      "channel": "whatsapp",
+      "subject": "Lembrete",
+      "body": "Ola {customer_name}! Sua reserva no {restaurant_name} e HOJE as {reservation_time}. Aguardamos voce! Mesa: {table_number}",
+      "active": true
+    },
+    {
+      "name": "Cancelamento de Reserva",
+      "channel": "whatsapp",
+      "subject": "Reserva Cancelada",
+      "body": "Ola {customer_name}! Sua reserva no {restaurant_name} para {reservation_date} as {reservation_time} foi cancelada. Esperamos ve-lo em breve!",
+      "active": true
+    },
+    {
+      "name": "Mesa Disponivel",
+      "channel": "whatsapp",
+      "subject": "Mesa Disponivel",
+      "body": "Ola {customer_name}! Uma mesa ficou disponivel no {restaurant_name}! Estimamos {estimated_wait} minutos de espera. Deseja confirmar?",
+      "active": true
+    },
+    {
+      "name": "Confirmacao por SMS",
+      "channel": "sms",
+      "subject": "Reserva Confirmada",
+      "body": "{restaurant_name}: Reserva confirmada para {reservation_date} {reservation_time}. Mesa {table_number}.",
+      "active": true
+    },
+    {
+      "name": "Confirmacao por Email",
+      "channel": "email",
+      "subject": "Confirmacao de Reserva - {restaurant_name}",
+      "body": "Prezado(a) {customer_name},\n\nSua reserva foi confirmada com sucesso!\n\nDetalhes:\n- Data: {reservation_date}\n- Horario: {reservation_time}\n- Mesa: {table_number}\n- Numero de pessoas: {party_size}\n\nEndereco: {restaurant_address}\n\nCaso precise alterar ou cancelar, entre em contato: {restaurant_phone}\n\nAguardamos voce!\n\nAtenciosamente,\nEquipe {restaurant_name}",
+      "active": true
+    }
+  ],
+  "notification_configs": [
+    {
+      "event_type": "reservation_created",
+      "enabled": true,
+      "channels": ["whatsapp", "email"]
+    },
+    {
+      "event_type": "confirmation_request",
+      "enabled": true,
+      "channels": ["whatsapp", "sms"]
+    },
+    {
+      "event_type": "reservation_reminder",
+      "enabled": true,
+      "channels": ["whatsapp"]
+    },
+    {
+      "event_type": "reservation_cancelled",
+      "enabled": true,
+      "channels": ["whatsapp", "email"]
+    },
+    {
+      "event_type": "table_available",
+      "enabled": true,
+      "channels": ["whatsapp", "sms"]
+    }
+  ],
+  "theme_customization": {
+    "primary_color": "#6366f1",
+    "secondary_color": "#8b5cf6",
+    "background_color": "#f8fafc",
+    "card_background_color": "#ffffff",
+    "text_color": "#1e293b",
+    "text_secondary_color": "#64748b",
+    "accent_color": "#06b6d4",
+    "success_color": "#22c55e",
+    "error_color": "#ef4444",
+    "warning_color": "#f59e0b",
+    "info_color": "#3b82f6",
+    "is_active": true
+  }
+}

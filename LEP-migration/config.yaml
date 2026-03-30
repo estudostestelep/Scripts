@@ -1,0 +1,37 @@
+# LEP Migration Tool - Configuração
+# Todas as opções podem ser sobrescritas por flags de linha de comando.
+
+# Modo de operação: dump | restore
+mode: dump
+
+# Configurações da origem (usado no modo dump)
+source:
+  url: https://lep-system-341885235510.us-central1.run.app
+  email: pablo@lep.com
+  password: senha123
+
+# Configurações do destino (usado no modo restore)
+destination:
+  url: https://lep-backend-prod-214010771335.us-central1.run.app
+  email: pablo@lep.com
+  password: senha123
+
+# Arquivos de dump
+dump:
+  # output_file: migration-dump.json    # padrão: migration-dump-{timestamp}.json
+  input_file: migration-dump-20260329-223945.json
+
+# Configurações HTTP
+server:
+  timeout: 60  # segundos
+
+# Bancos de dados — usado no modo patch-passwords
+source_db:
+  url: "postgres://lep_user:gH$0?_QVn7[mz?#sb3f{$P3@J!B8v_{G@leps-482718:us-central1:leps-postgres-prod/lep_database?sslmode=disable"
+dest_db:
+  url: "postgres://lep_user:lep_password@localhost:5432/lep_database?sslmode=disable"
+
+# Logging
+logging:
+  level: info          # info | debug
+  show_payloads: false # true para exibir payloads completos

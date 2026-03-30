@@ -151,17 +151,17 @@ func (ts *TestSuite) TestMenuIntelligentSelection() bool {
 	}
 
 	// ============================================================================
-	// 4. TESTE: Definir cardápio como override manual - PUT /menu/:id/manual-override
+	// 4. TESTE: Definir cardápio como override manual - PUT /admin/menu/:id/manual-override
 	// ============================================================================
-	ts.logger.Subsection("4. PUT /menu/:id/manual-override - Definir como override manual")
+	ts.logger.Subsection("4. PUT /admin/menu/:id/manual-override - Definir como override manual")
 
 	if firstMenuID != "" {
 		startTime = time.Now()
-		overrideResp, err := ts.client.Request("PUT", "/menu/"+firstMenuID+"/manual-override", map[string]interface{}{}, true)
+		overrideResp, err := ts.client.Request("PUT", "/admin/menu/"+firstMenuID+"/manual-override", map[string]interface{}{}, true)
 		overrideTime := time.Since(startTime)
 
 		if err != nil {
-			ts.addResult("PUT /menu/:id/manual-override", false, err.Error())
+			ts.addResult("PUT /admin/menu/:id/manual-override", false, err.Error())
 		} else {
 			// Verificar se a resposta indica sucesso
 			var updatedMenu map[string]interface{}
@@ -180,33 +180,33 @@ func (ts *TestSuite) TestMenuIntelligentSelection() bool {
 
 				if isManualOverride {
 					ts.logger.Info("✓ Override manual ativado em %.2fms", overrideTime.Seconds()*1000)
-					ts.addResult("PUT /menu/:id/manual-override", true, fmt.Sprintf("Override ativado em %.0fms", overrideTime.Seconds()*1000))
+					ts.addResult("PUT /admin/menu/:id/manual-override", true, fmt.Sprintf("Override ativado em %.0fms", overrideTime.Seconds()*1000))
 				} else {
 					ts.logger.Warn("Override não foi ativado na resposta")
-					ts.addResult("PUT /menu/:id/manual-override", true, "Resposta recebida mas is_manual_override=false")
+					ts.addResult("PUT /admin/menu/:id/manual-override", true, "Resposta recebida mas is_manual_override=false")
 				}
 			}
 		}
 	} else {
 		ts.logger.Warn("Nenhum menu ID disponível para teste de override")
-		ts.addResult("PUT /menu/:id/manual-override", true, "Sem menu para testar (OK)")
+		ts.addResult("PUT /admin/menu/:id/manual-override", true, "Sem menu para testar (OK)")
 	}
 
 	// ============================================================================
-	// 5. TESTE: Remover override manual - DELETE /menu/manual-override
+	// 5. TESTE: Remover override manual - DELETE /admin/menu/manual-override
 	// ============================================================================
-	ts.logger.Subsection("5. DELETE /menu/manual-override - Remover override manual")
+	ts.logger.Subsection("5. DELETE /admin/menu/manual-override - Remover override manual")
 
 	if firstMenuID != "" {
 		startTime = time.Now()
-		_, err := ts.client.Request("DELETE", "/menu/manual-override", nil, true)
+		_, err := ts.client.Request("DELETE", "/admin/menu/manual-override", nil, true)
 		removeTime := time.Since(startTime)
 
 		if err != nil {
-			ts.addResult("DELETE /menu/manual-override", false, err.Error())
+			ts.addResult("DELETE /admin/menu/manual-override", false, err.Error())
 		} else {
 			ts.logger.Info("✓ Override manual removido em %.2fms", removeTime.Seconds()*1000)
-			ts.addResult("DELETE /menu/manual-override", true, fmt.Sprintf("Override removido em %.0fms", removeTime.Seconds()*1000))
+			ts.addResult("DELETE /admin/menu/manual-override", true, fmt.Sprintf("Override removido em %.0fms", removeTime.Seconds()*1000))
 
 			// Verificar se voltou a automático
 			startTime = time.Now()
