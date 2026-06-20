@@ -23,34 +23,21 @@ func (s *DumpService) Run(email, password, sourceURL, outputFile string) error {
 	s.logger.Section("INICIANDO DUMP")
 	s.logger.Info("Source: %s", sourceURL)
 
-	// Login para obter todas as combinações org/projeto do usuário
-	s.logger.Info("Fazendo login em %s...", sourceURL)
-	loginProjects, err := s.client.Login(email, password)
-	if err != nil {
-		return fmt.Errorf("falha no login: %w", err)
+	// Admin login — o backend atual descontinuou o endpoint unificado /login.
+	// O dump agora autentica via /admin/login, enumera TODAS as organizações via
+	// GET /organization e seus projetos via GET /project/organization/{id}, e lê
+	// os dados de cada projeto com os headers de org/projeto (modo suporte).
+	s.logger.Info("Fazendo admin login em %s...", sourceURL)
+	if err := s.client.AdminLogin(email, password); err != nil {
+		return fmt.Errorf("falha no admin login: %w", err)
 	}
-	if len(loginProjects) == 0 {
-		return fmt.Errorf("nenhuma organização/projeto encontrado para o usuário %s", email)
-	}
-	s.logger.Success("Autenticado — %d combinações org/projeto encontradas", len(loginProjects))
+	s.logger.Success("Autenticado como admin")
 
-	// Agrupar projetos por organização
-	orgOrder := []string{}
-	orgMap := make(map[string]*OrganizationDump)
-	for _, lp := range loginProjects {
-		if _, ok := orgMap[lp.OrganizationID]; !ok {
-			orgOrder = append(orgOrder, lp.OrganizationID)
-			orgMap[lp.OrganizationID] = &OrganizationDump{
-				ID:    lp.OrganizationID,
-				Name:  lp.OrganizationName,
-				Email: lp.OrganizationEmail,
-			}
-		}
-		orgMap[lp.OrganizationID].Projects = append(orgMap[lp.OrganizationID].Projects, ProjectDump{
-			ID:   lp.ProjectID,
-			Name: lp.ProjectName,
-		})
+	orgs := s.getList("/organization")
+	if len(orgs) == 0 {
+		return fmt.Errorf("nenhuma organização retornada por GET /organization (token admin sem acesso?)")
 	}
+	s.logger.Success("%d organizações encontradas", len(orgs))
 
 	dump := MigrationDump{
 		Metadata: DumpMetadata{
@@ -60,33 +47,44 @@ func (s *DumpService) Run(email, password, sourceURL, outputFile string) error {
 		},
 	}
 
-	// Dump de cada organização em ordem
-	for orgIdx, orgID := range orgOrder {
-		org := orgMap[orgID]
-		s.logger.Subsection(fmt.Sprintf("Organização %d/%d: %s", orgIdx+1, len(orgOrder), org.Name))
+	// Dump de cada organização
+	for orgIdx, orgRaw := range orgs {
+		orgID, _ := orgRaw["id"].(string)
+		orgName, _ := orgRaw["name"].(string)
+		orgEmail, _ := orgRaw["email"].(string)
+		if orgID == "" {
+			continue
+		}
+		s.logger.Subsection(fmt.Sprintf("Organização %d/%d: %s", orgIdx+1, len(orgs), orgName))
 
+		projects := s.getList("/project/organization/" + orgID)
 		var dumpedProjects []ProjectDump
-		for pi, proj := range org.Projects {
-			s.logger.Info("  Projeto %d/%d: %s (%s)", pi+1, len(org.Projects), proj.Name, proj.ID)
-			s.client.SetOrgProject(org.ID, proj.ID)
+		for pi, projRaw := range projects {
+			projID, _ := projRaw["id"].(string)
+			projName, _ := projRaw["name"].(string)
+			if projID == "" {
+				continue
+			}
+			s.logger.Info("  Projeto %d/%d: %s (%s)", pi+1, len(projects), projName, projID)
+			s.client.SetOrgProject(orgID, projID)
 
 			data, err := s.dumpProjectData()
 			if err != nil {
-				s.logger.Error("  Erro ao fazer dump do projeto %s: %v", proj.ID, err)
+				s.logger.Error("  Erro ao fazer dump do projeto %s: %v", projID, err)
 				data = ProjectData{}
 			}
 
 			dumpedProjects = append(dumpedProjects, ProjectDump{
-				ID:   proj.ID,
-				Name: proj.Name,
+				ID:   projID,
+				Name: projName,
 				Data: data,
 			})
 		}
 
 		dump.Organizations = append(dump.Organizations, OrganizationDump{
-			ID:       org.ID,
-			Name:     org.Name,
-			Email:    org.Email,
+			ID:       orgID,
+			Name:     orgName,
+			Email:    orgEmail,
 			Projects: dumpedProjects,
 		})
 	}
